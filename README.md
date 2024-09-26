@@ -19,12 +19,11 @@ conda activate  vllm-0.6.2
 pip install vllm==0.6.2
 ```
 
-Get a model:
+Get a model (e.g., https://huggingface.co/ibm-granite/granite-8b-code-base-128k):
 
 ```
 pip install huggingface-hub
 huggingface-cli download --cache-dir ./ --local-dir-use-symlinks False --revision main --local-dir models/granite-8b ibm-granite/granite-8b-code-base-128k
-https://huggingface.co/ibm-granite/granite-8b-code-base-128k
 ```
 
 Clone repo and run experiment:
