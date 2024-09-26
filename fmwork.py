@@ -91,7 +91,7 @@ def t1(
     var.dts.append(dt)
 
     print(
-        'REP',
+        'FMWORK REP',
         '%3d / %3d :' % (rep + 1, reps),
         '%s %s' % (time_fmt(var.t0s[-1]), time_fmt(var.t1s[-1])),
         '%.3f' % (dt),                            # rep time (s)
@@ -116,7 +116,7 @@ def show(
     print()
 
     print(
-        'RES',
+        'FMWORK RES',
         datetime.datetime.now().strftime('%Y%m%d-%H%M%S.%f'),
         input_size,
         output_size,
