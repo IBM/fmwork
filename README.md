@@ -4,19 +4,13 @@ FM Benchmarking Framework
 
 ## Quick start
 
-Install conda:
+Clone and Install vllm in a v1.18.0 Gaudi3 release docker container 
 
 ```
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-```
+git clone https://github.com/HabanaAI/vllm-fork.git
+cd vllm-fork
+pip install -e . 
 
-Create environment and install deps:
-
-```
-conda create -n vllm-0.6.2 python=3.10 -y
-conda activate  vllm-0.6.2
-pip install vllm==0.6.2
 ```
 
 Get a model (e.g., https://huggingface.co/ibm-granite/granite-8b-code-base-128k):
@@ -79,4 +73,23 @@ If saved to a file, all `RES` lines can be easily grep-ed for further analysis.
 ```
 grep -R "FMWORK RES" outputs/ | tr / ' ' | column -t
 ```
+
+Gaudi3 Models run command examples 
+
+## Tested Models and Configurations
+
+The following table contains models and configurations we have validated on Gaudi3.
+
+| Model | D-Type | Devices | Command |
+|--------------| --------------| --------------| --------------|
+|llama3.1-8b--Instruct| bf16| 1 | ./run.sh -m models/Meta-Llama-3.1-8B-Instruct/ -b 132 --multistep 32 |
+|llama3.1-405b--Instruct| bf16 | 8 | ./run.sh -m models/Llama-3.1-405B-Instruct -t 8 -b 64 --multistep 32 |
+|granite-8b-Instruct| bf16 | 1 | ./run.sh -m models/IBM_Granite-8B-Instruct -b 104 --multistep 32 |
+|granite-20b-Instruct-8K| bf16 | 1 | ./run.sh -m models/granite-20b-code-instruct-8k -b 40 --multistep 32 |
+|Meta-Llama-3.1-70B-Instruct| bf16 | 4 | ./run.sh -m models/Meta-Llama-3.1-70B-Instruct/ -t 4  -b 134 --multistep 32 |
+|granite-3b-code-instruct_128k| bf16 | 1 | "VLLM_DECODE_BLOCK_BUCKET_STEP=16 VLLM_PA_SOFTMAX_IMPL='index_reduce' VLLM_CONTIGUOUS_PA=true  VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh -m ibm-granite/granite-3b-code-instruct-128k -b 25 -t 1 --multistep 66 |
+|granite-34b-code-instruct_8k| bf16 |1  | VLLM_DECODE_BLOCK_BUCKET_STEP=32  VLLM_PA_SOFTMAX_IMPL='index_reduce' VLLM_CONTIGUOUS_PA=true VLLM_CONFIG_HIDDEN_LAYERS=6  VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh  -m ibm-granite/granite-34b-code-instruct-8k -b 104  -t 1 --multistep 66 |
+|Mistral-Large-Instruct-2407| bf16 | 4 | ./run.sh -m mistralai/Mistral-Large-Instruct-2407  -t 4 -b 64 --multistep 32 |
+|Mixtral 8x7B| bf16 | 1 | ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 1  -b 88 --multistep 32 |
+|Mixtral 8x7B| bf16 | 2 | ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 2  -b 234  --multistep 8 |
 

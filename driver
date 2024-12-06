@@ -1,13 +1,25 @@
 #!/usr/bin/env -S python -u
 
+"""
+Taken from https://github.com/IBM/fmwork/tree/main @665d802c2e1e9a756e27f0c40eba9559d551d245
+
+Changes:
+    - add arguments --device, --block_size, --weights_load_device, --num_scheduler_steps and --max_prompt_batch_size
+    - setup HPU related vLLM settings
+
+"""
+
 import argparse
 import fmwork
+import os
 import torch
 import traceback
 import vllm
 
+
 class var: pass
 class par: pass
+
 
 def main():
 
@@ -15,25 +27,41 @@ def main():
     llm()
     runs()
     done()
+    os._exit(0)
 
 def params():
 
     fmwork.banner('PARAMS')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--model_path',             type=str, required=True)
-    parser.add_argument('-i', '--input_size',             type=str, required=True)
-    parser.add_argument('-o', '--output_size',            type=str, required=True)
-    parser.add_argument('-b', '--batch_size',             type=str, required=True)
-    parser.add_argument('-t', '--tensor_parallel',        type=int, required=True)
-    parser.add_argument('-r', '--reps',                   type=int, default=3)
-    parser.add_argument('-d', '--dtype',                  type=str, default='auto')
-    parser.add_argument('-q', '--quantization',           type=str, default=None)
-    parser.add_argument('-k', '--kv_cache_dtype',         type=str, default='auto')
-    parser.add_argument('-s', '--num_scheduler_steps',    type=int, default=1)
-    parser.add_argument('-M', '--max_num_seqs',           type=int, default=1024)
-    parser.add_argument('-u', '--gpu_memory_utilization', type=float, default=0.95)
-    parser.add_argument('-e', '--enforce_eager',          action='store_true')
+
+    parser.add_argument('-m', '--model_path',
+        type=str, required=True)
+    parser.add_argument('-i', '--input_size',
+        type=str, required=True)
+    parser.add_argument('-o', '--output_size',
+        type=str, required=True)
+    parser.add_argument('-b', '--batch_size',
+        type=str, required=True)
+    parser.add_argument('-t', '--tensor_parallel',
+        type=int, required=True)
+    parser.add_argument('-r', '--reps',
+        type=int, default=3)
+    parser.add_argument('-d', '--dtype',
+        type=str, default='auto')
+    parser.add_argument('-q', '--quantization',
+        type=str, default=None)
+    parser.add_argument('-k', '--kv_cache_dtype',
+        type=str, default='auto')
+    parser.add_argument('-u', '--gpu_memory_utilization',
+        type=float, default=0.95)
+    parser.add_argument('-e', '--enforce_eager',
+        action='store_true')
+    parser.add_argument('--device', type=str, default="cuda")
+    parser.add_argument('--block_size', type=int, default=128)
+    parser.add_argument('--max_num_batched_tokens', type=int, default=1024)
+    parser.add_argument('--weights_load_device', type=str, default=None)
+    parser.add_argument("--num_scheduler_steps", type=int, default=1)
     parser.parse_args(namespace=par)
 
     attrs = []
@@ -54,16 +82,21 @@ def llm():
     fmwork.banner('LLM')
 
     var.llm = vllm.LLM(
-        model                  = par.model_path,
-        tensor_parallel_size   = par.tensor_parallel,
         dtype                  = par.dtype,
-        quantization           = par.quantization,
-        kv_cache_dtype         = par.kv_cache_dtype,
         enforce_eager          = par.enforce_eager,
-        num_scheduler_steps    = par.num_scheduler_steps,
         gpu_memory_utilization = par.gpu_memory_utilization,
+        kv_cache_dtype         = par.kv_cache_dtype,
         max_model_len          = max(var.input_sizes) + max(var.output_sizes),
+        max_num_batched_tokens = par.max_num_batched_tokens,
+        model                  = par.model_path,
+        quantization           = par.quantization,
+        tensor_parallel_size   = par.tensor_parallel,
         trust_remote_code      = True,
+        device                 = par.device,
+        block_size             = par.block_size,
+        max_num_seqs           = max(var.batch_sizes),
+        weights_load_device    = par.weights_load_device,
+        num_scheduler_steps    = par.num_scheduler_steps,
     )
 
 def runs():
@@ -105,7 +138,10 @@ def run(input_size, output_size, batch_size):
     for rep in range(par.reps):
         fmwork.t0()
         var.llm.generate(**kwargs)
-        torch.cuda.synchronize()
+        if par.device == "hpu":
+            torch.hpu.synchronize()
+        else:
+            torch.cuda.synchronize()
         fmwork.t1(
             rep, par.reps,
             input_size, output_size, batch_size,
