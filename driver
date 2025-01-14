@@ -1,119 +1,267 @@
 #!/usr/bin/env -S python -u
 
 import argparse
-import fmwork
-import torch
+import datetime
+import numpy as np
+import random
+import requests
+import time
 import traceback
-import vllm
 
-class var: pass
-class par: pass
+from PIL import Image
+from transformers import AutoTokenizer
+from vllm import LLM, SamplingParams
+
+class FMworkException(Exception): pass
+
+def banner(*s):
+    print(); print(80*'-');
+    print(' '.join(list(map(str,s))));
+    print(80*'-'); print()
+
+def time_get(): return time.time_ns()
+def time_diff(t1, t0): return float(t1 - t0) / 1E9
+def time_fmt(t): t = str(t).zfill(9); return '%s.%s' % (t[:-9], t[-9:])
+
+class par: pass # defined in parser
+class var: pass # defined below
+var.engine  = None
+var.__input = None
+var.__image = None
 
 def main():
 
-    params()
-    llm()
-    runs()
-    done()
+    setup_args()
+    setup_input()
+    setup_engine()
+    dts = benchmark()
+    show(dts)
 
-def params():
-
-    fmwork.banner('PARAMS')
+def setup_args():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--model_path',             type=str, required=True)
-    parser.add_argument('-i', '--input_size',             type=str, required=True)
-    parser.add_argument('-o', '--output_size',            type=str, required=True)
-    parser.add_argument('-b', '--batch_size',             type=str, required=True)
-    parser.add_argument('-t', '--tensor_parallel',        type=int, required=True)
-    parser.add_argument('-r', '--reps',                   type=int, default=3)
-    parser.add_argument('-d', '--dtype',                  type=str, default='auto')
-    parser.add_argument('-q', '--quantization',           type=str, default=None)
-    parser.add_argument('-k', '--kv_cache_dtype',         type=str, default='auto')
-    parser.add_argument('-s', '--num_scheduler_steps',    type=int, default=1)
-    parser.add_argument('-M', '--max_num_seqs',           type=int, default=1024)
-    parser.add_argument('-u', '--gpu_memory_utilization', type=float, default=0.95)
-    parser.add_argument('-e', '--enforce_eager',          action='store_true')
-    parser.parse_args(namespace=par)
+    parser.add_argument('--model_path',           type = str, required = True)
+    parser.add_argument('--image_url',            type = str)
+    parser.add_argument('--image_width',          type = int)
+    parser.add_argument('--image_height',         type = int)
+    parser.add_argument('--image_channels',       type = int, default  = 3)
+    parser.add_argument('--input_text',           type = str)
+    parser.add_argument('--input_size',           type = int)
+    parser.add_argument('--output_size',          type = int, required = True)
+    parser.add_argument('--batch_size',           type = int, required = True)
+    parser.add_argument('--tensor_parallel_size', type = int, required = True)
+    parser.add_argument('--max_model_len',        type = int)
+    parser.add_argument('--max_num_seqs',         type = int)
+    parser.add_argument('--num_scheduler_steps',  type = int, default  = 1)
+    parser.add_argument('--reps',                 type = int, default  = 5)
+    parser.parse_args(namespace = par)
 
-    attrs = []
-    for attr in dir(par):
-        if not attr.startswith('__') and not attr.endswith('__'):
-            attrs.append(attr)
-    pad = max([len(x) for x in attrs])
-    for attr in sorted(attrs):
-        print('%-*s = %s' % (
-            pad, attr, getattr(par, attr)))
+def setup_engine():
 
-    var.input_sizes  = list(map(int, par.input_size.split(',')))
-    var.output_sizes = list(map(int, par.output_size.split(',')))
-    var.batch_sizes  = list(map(int, par.batch_size.split(',')))
+    banner('ENGINE')
 
-def llm():
+    max_model_len = par.max_model_len
+    if not max_model_len: max_model_len = par.input_size + par.output_size
 
-    fmwork.banner('LLM')
+    max_num_seqs  = par.max_num_seqs
+    if not max_num_seqs:  max_num_seqs  = par.batch_size
 
-    var.llm = vllm.LLM(
-        model                  = par.model_path,
-        tensor_parallel_size   = par.tensor_parallel,
-        dtype                  = par.dtype,
-        quantization           = par.quantization,
-        kv_cache_dtype         = par.kv_cache_dtype,
-        enforce_eager          = par.enforce_eager,
-        num_scheduler_steps    = par.num_scheduler_steps,
-        gpu_memory_utilization = par.gpu_memory_utilization,
-        max_model_len          = max(var.input_sizes) + max(var.output_sizes),
-        trust_remote_code      = True,
+    var.engine = LLM(
+        model                = par.model_path,
+        max_model_len        = max_model_len,
+        max_num_seqs         = max_num_seqs,
+        tensor_parallel_size = par.tensor_parallel_size,
+        enforce_eager        = True,
+        num_scheduler_steps  = par.num_scheduler_steps,
     )
 
-def runs():
+def setup_input():
 
-    for batch_size in var.batch_sizes:
-        for input_size in var.input_sizes:
-            for output_size in var.output_sizes:
-                run(input_size, output_size, batch_size)
+    if   par.input_text: return setup_input_text()
+    elif par.input_size: return setup_input_generate()
+    else:
+        raise FMworkException(
+            'Must define either --input_text or --input_size')
 
-def run(input_size, output_size, batch_size):
+def setup_input_text():
 
-    fmwork.banner(
-        'RUN',
-        input_size,  '/',
-        output_size, '/',
-        batch_size,  '/',
-        par.tensor_parallel
+    messages = [
+        {
+            'role': 'user',
+            'content': [
+                { 'type': 'image' },
+                { 'type': 'text', 'text': par.input_text },
+            ],
+        },
+    ]
+
+    tokenizer = AutoTokenizer.from_pretrained(par.model_path)
+
+    prompt_token_ids = tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt = True,
+        tokenize = True,
     )
 
-    input_batch = fmwork.input_generator(
-        par.model_path,
-        input_size, batch_size,
-        return_tensors='np',
+    par.input_size = len(prompt_token_ids)
+
+    inputs = []
+    for b in range(par.batch_size):
+        inputs.append({
+            'prompt_token_ids': prompt_token_ids,
+            'multi_modal_data' : { 'image': setup_image() },
+        })
+
+    return inputs
+
+def setup_input_generate():
+
+    tokenizer = AutoTokenizer.from_pretrained(par.model_path)
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+
+    vocab = list(range(0, tokenizer.vocab_size))
+    for i in tokenizer.all_special_ids:
+        if i in vocab:
+            vocab.remove(i)
+
+    inputs = []
+    for b in range(par.batch_size):
+        inputs.append({
+            'prompt_token_ids':
+                np.random.choice(vocab, size = par.input_size).tolist(),
+            'multi_modal_data' : { 'image': setup_image() },
+        })
+
+    return inputs
+
+def setup_image():
+
+    if par.image_url:                          return setup_image_url()
+    elif par.image_width and par.image_height: return setup_image_generate()
+    else:
+        raise FMworkException(
+            'Must define either --image_url '\
+            'or --image_width and --image_height.')
+
+def setup_image_url():
+
+    if not var.__image:
+        var.__image = Image.open(
+            requests.get(par.image_url, stream = True).raw)
+
+    return var.__image
+
+def setup_image_generate():
+
+    return Image.fromarray(
+        np.random.randint(
+            0,
+            255,
+            (par.image_height, par.image_width, par.image_channels),
+            dtype = np.uint8,
+        )
     )
 
-    sampling_params = vllm.SamplingParams(
-        max_tokens = output_size,
+def benchmark():
+
+    dts = []
+
+    for r in range(par.reps):
+        dts.append(run(r))
+
+    return dts
+
+def run(r):
+
+    banner('RUN %d / %d' % (r + 1, par.reps))
+
+    sampling_params = SamplingParams(
         ignore_eos = True,
+        min_tokens = par.output_size,
+        max_tokens = par.output_size,
     )
 
-    kwargs = {
-        'prompt_token_ids' : input_batch,
-        'sampling_params'  : sampling_params,
-        'use_tqdm'         : False,
-    }
+    t0 = time_get()
+    outputs = var.engine.generate(setup_input(), sampling_params)
+    t1 = time_get()
+    dt = time_diff(t1, t0)
 
-    fmwork.reset()
+    for output in outputs:
+        input_size  = len(output.prompt_token_ids)
+        output_size = len(output.outputs[0].token_ids)
+        batch_size  = par.batch_size
 
-    for rep in range(par.reps):
-        fmwork.t0()
-        var.llm.generate(**kwargs)
-        torch.cuda.synchronize()
-        fmwork.t1(
-            rep, par.reps,
-            input_size, output_size, batch_size,
-            par.tensor_parallel)
+        print()
+        print('prompt_token_ids:        ', len(output.prompt_token_ids))
+        print('encoder_prompt_token_ids:', len(output.encoder_prompt_token_ids))
+        print('outputs[0].token_ids:    ', len(output.outputs[0].token_ids))
+        print('output.outputs[0].text:')
+        print()
+        print(output.outputs[0].text)
 
-def done():
+    print(); print(
+        'FMWORK REP',
+        input_size,
+        output_size,
+        batch_size,
+        par.tensor_parallel_size,
+        '%.3f' % (dt),
+        '%.1f' % (1000.0 * dt / output_size),
+        '%.1f' % (batch_size * output_size / dt),
+    )
 
-    fmwork.banner('DONE')
+    return dt
 
-if __name__ == '__main__': main()
+def show(dts):
+
+    banner('DONE')
+
+    if par.reps < 2: return
+
+    ign = 0.2
+    ign = int(max(ign * len(dts), 1))
+    rem = dts[ign:]
+    med = np.median(rem)
+    itl = 1000.0 * med / par.output_size
+    thp = par.batch_size * par.output_size / med
+
+    print(
+        'FMWORK RES',
+        datetime.datetime.now().strftime('%Y%m%d-%H%M%S.%f'),
+        par.input_size,
+        par.output_size,
+        par.batch_size,
+        par.tensor_parallel_size,
+        '%.6f' % (med),
+        '%.1f' % (itl),
+        '%.1f' % (thp),
+    )
+
+    print()
+
+    print('Input size                = %d'   % (par.input_size))
+    print('Output size               = %d'   % (par.output_size))
+    print('Batch size                = %d'   % (par.batch_size))
+    print('Tensor parallel size      = %d'   % (par.tensor_parallel_size))
+    print('Median iteration time (s) = %.6f' % (med))
+    print('Inter-token latency (ms)  = %.1f' % (itl))
+    print('Throughput (tok/s)        = %.1f' % (thp))
+
+    print()
+
+if __name__ == '__main__':
+    try:
+        main()
+    except SystemExit as e:
+        exit(e.code)
+    except FMworkException as e:
+        print(e)
+        exit(1)
+    except KeyboardInterrupt:
+        print('Interrupted by user.')
+        exit(2)
+    except:
+        traceback.print_exc()
+        exit(3)
 
