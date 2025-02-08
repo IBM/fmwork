@@ -4,49 +4,62 @@ FM Benchmarking Framework
 
 ## Quick start
 
-Clone and Install vllm in a v1.18.0 Gaudi3 release docker container 
+Clone and Install vllm in a v1.19.2 Gaudi3 release docker container 
 
 ```
 git clone https://github.com/HabanaAI/vllm-fork.git
 cd vllm-fork
-pip install -e . 
-
+git checkout 6edbcf0d   # this is on v.1.20.0 branch
+pip install -r requirements-hpu.txt  
+python setup.py develop  
 ```
 
 Get a model (e.g., https://huggingface.co/ibm-granite/granite-8b-code-base-128k):
 
 ```
 pip install huggingface-hub
-huggingface-cli download --cache-dir ./ --local-dir-use-symlinks False --revision main --local-dir models/granite-8b ibm-granite/granite-8b-code-base-128k
+huggingface-cli download --cache-dir ./ --local-dir-use-symlinks False --revision main --local-dir models/granite-8b ibm-granite/granite-3.1-8b-instruct
 ```
 
 Clone repo and run experiment:
 
 ```
 git clone git@github.com:IBM/fmwork.git
-./fmwork/driver --model_path models/granite-8b --input_size 1024 --output_size 1024 --batch_size 1,2,4 --tensor_parallel 1
+cd fmwork
+./run.sh -m ibm-granite/granite-3.1-8b-instruct -b 125 --multistep 32
+
+# vision model (include --vision flag)
+./run.sh -m meta-llama/Llama-3.2-90B-Vision-Instruct -t 4 -b 64 --multistep 32 --vision
+
+# fp8 quantization example
+QUANT_CONFIG=/software/data/vllm-benchmarks/inc/llama-3.3-70b-instruct/maxabs_quant_g3.json ./run.sh -m meta-llama/llama-3.3-70b-instruct -t 4  -b 165 --multistep 32 --fp8
 ```
+
+Note: FP8 quantization requires calibration to be done prior to running inferencing. `QUANT_CONFIG` file will need to be passed as a variable before the `run.sh` command.  
 
 This should produce blocks of outputs like:
 
 ```
 --------------------------------------------------------------------------------
-RUN 1024 / 1024 / 1 / 1
+RUN 1024 / 1024 / 125 / 1
 --------------------------------------------------------------------------------
+FMWORK REP   1 /   3 : 1738969988.187714421 1738970013.446952411 25.259 24.7 5067.5
+FMWORK REP   2 /   3 : 1738970013.447015145 1738970038.822735493 25.376 24.8 5044.2
+FMWORK REP   3 /   3 : 1738970038.822796496 1738970064.211628445 25.389 24.8 5041.6
 
-FMWORK REP   1 /   3 : 1727375968.424120936 1727375976.598311213 8.174 8.0 125.3
-FMWORK REP   2 /   3 : 1727375976.598364287 1727375984.859228127 8.261 8.1 124.0
-FMWORK REP   3 /   3 : 1727375984.859270605 1727375993.005784506 8.147 8.0 125.7
-
-FMWORK RES 20240926-183953.009140 1024 1024 1 1 8.204 8.0 124.8
+FMWORK RES 20250207-231424.212051 1024 1024 125 1 25.382 24.8 5042.9
 
 Input size                = 1024
 Output size               = 1024
-Batch size                = 1
+Batch size                = 125
 Tensor parallelism        = 1
-Median iteration time (s) = 8.204
-Inter-token latency (ms)  = 8.0
-Throughput (tok/s)        = 124.8
+Median iteration time (s) = 25.382
+Inter-token latency (ms)  = 24.8
+Throughput (tok/s)        = 5042.9
+
+--------------------------------------------------------------------------------
+DONE
+--------------------------------------------------------------------------------
 ```
 
 - `FMWORK REP` lines contain stats per experiment repetition (3 repetitions by default):
