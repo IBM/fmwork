@@ -231,9 +231,9 @@ def show(dts):
     print(
         'FMWORK RES',
         datetime.datetime.now().strftime('%Y%m%d-%H%M%S.%f'),
-        par.input_size,
         par.image_height,
         par.image_width,
+        par.input_size,
         par.output_size,
         par.batch_size,
         par.tensor_parallel_size,
@@ -244,9 +244,9 @@ def show(dts):
 
     print()
 
-    print('Input size                = %d'   % (par.input_size))
     print('Image Height               = %d'   % (par.image_height))
     print('Image Width                = %d'   % (par.image_width))
+    print('Input size                = %d'   % (par.input_size))
     print('Output size               = %d'   % (par.output_size))
     print('Batch size                = %d'   % (par.batch_size))
     print('Tensor parallel size      = %d'   % (par.tensor_parallel_size))
