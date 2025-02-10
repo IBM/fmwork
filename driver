@@ -149,6 +149,7 @@ def setup_image_url():
     if not var.__image:
         var.__image = Image.open(
             requests.get(par.image_url, stream = True).raw)
+        par.image_width, par.image_height = var.__image.size
 
     return var.__image
 
@@ -194,7 +195,8 @@ def run(r):
 
         print()
         print('prompt_token_ids:        ', len(output.prompt_token_ids))
-        print('encoder_prompt_token_ids:', len(output.encoder_prompt_token_ids))
+        if output.encoder_prompt_token_ids:
+            print('encoder_prompt_token_ids:', len(output.encoder_prompt_token_ids))
         print('outputs[0].token_ids:    ', len(output.outputs[0].token_ids))
         print('output.outputs[0].text:')
         print()
@@ -229,6 +231,8 @@ def show(dts):
     print(
         'FMWORK RES',
         datetime.datetime.now().strftime('%Y%m%d-%H%M%S.%f'),
+        par.image_height,
+        par.image_width,
         par.input_size,
         par.output_size,
         par.batch_size,
@@ -240,6 +244,8 @@ def show(dts):
 
     print()
 
+    print('Image Height               = %d'   % (par.image_height))
+    print('Image Width                = %d'   % (par.image_width))
     print('Input size                = %d'   % (par.input_size))
     print('Output size               = %d'   % (par.output_size))
     print('Batch size                = %d'   % (par.batch_size))
