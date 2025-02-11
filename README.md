@@ -87,6 +87,11 @@ If saved to a file, all `RES` lines can be easily grep-ed for further analysis.
 grep -R "FMWORK RES" outputs/ | tr / ' ' | column -t
 ```
 
+System config 
+Kernel : 5.15.0-91-generic
+OS : Ubuntu 22.04.5 LTS
+PT version : 2.5.1 
+
 Gaudi3 Models run command examples 
 
 ## Tested Models and Configurations
@@ -95,14 +100,16 @@ The following table contains models and configurations we have validated on Gaud
 
 | Model | D-Type | Devices | Command |
 |--------------| --------------| --------------| --------------|
-|llama3.1-8b--Instruct| bf16| 1 | ./run.sh -m models/Meta-Llama-3.1-8B-Instruct/ -b 132 --multistep 32 |
-|llama3.1-405b--Instruct| bf16 | 8 | ./run.sh -m models/Llama-3.1-405B-Instruct -t 8 -b 64 --multistep 32 |
-|granite-8b-Instruct| bf16 | 1 | ./run.sh -m models/IBM_Granite-8B-Instruct -b 104 --multistep 32 |
-|granite-20b-Instruct-8K| bf16 | 1 | ./run.sh -m models/granite-20b-code-instruct-8k -b 40 --multistep 32 |
-|Meta-Llama-3.1-70B-Instruct| bf16 | 4 | ./run.sh -m models/Meta-Llama-3.1-70B-Instruct/ -t 4  -b 134 --multistep 32 |
-|granite-3b-code-instruct_128k| bf16 | 1 | "VLLM_DECODE_BLOCK_BUCKET_STEP=16 VLLM_PA_SOFTMAX_IMPL='index_reduce' VLLM_CONTIGUOUS_PA=true  VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh -m ibm-granite/granite-3b-code-instruct-128k -b 25 -t 1 --multistep 66 |
-|granite-34b-code-instruct_8k| bf16 |1  | VLLM_DECODE_BLOCK_BUCKET_STEP=32  VLLM_PA_SOFTMAX_IMPL='index_reduce' VLLM_CONTIGUOUS_PA=true VLLM_CONFIG_HIDDEN_LAYERS=6  VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh  -m ibm-granite/granite-34b-code-instruct-8k -b 104  -t 1 --multistep 66 |
-|Mistral-Large-Instruct-2407| bf16 | 4 | ./run.sh -m mistralai/Mistral-Large-Instruct-2407  -t 4 -b 64 --multistep 32 |
-|Mixtral 8x7B| bf16 | 1 | ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 1  -b 88 --multistep 32 |
-|Mixtral 8x7B| bf16 | 2 | ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 2  -b 234  --multistep 8 |
-
+|llama3.1-8b--Instruct| bf16| 1 | ./run.sh -m models/Meta-Llama-3.1-8B-Instruct/ -b 150 --multistep 32 |
+|llama3.1-405b--Instruct| fp8 | 8 | QUANT_CONFIG=/pathto/meta-llama-3.1-405b-instruct-v2/maxabs_quant_g3.json ./run.sh -m models/Llama-3.1-405B-Instruct -t 8 -b 132 --fp8  --multistep 32 |
+|granite-3.1-8b-instruct| bf16 | 1 | ./run.sh -m ibm-granite/granite-3.1-8b-instruct -b 125 --multistep 32 |
+|granite-20b-code-instruct-8k | bf16 | 1 |  VLLM_DECODE_BLOCK_BUCKET_STEP=16 VLLM_CONFIG_HIDDEN_LAYERS=32 ./run.sh -m ibm-granite/granite-20b-code-instruct-8k -b 62 --multistep 32 |
+|Meta-Llama-3.1-70B-Instruct| bf16 | 4 | ./run.sh -m models/Meta-Llama-3.1-70B-Instruct/ -t 4  -b 165 --multistep 32 |
+|granite-3b-code-instruct-128k| bf16 | 1 | VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh  -m ibm-granite/granite-3b-code-instruct-128k  -b 32  -t 1 --multistep 66 |
+|granite-34b-code-instruct-8k| bf16 |1  |  VLLM_DECODE_BLOCK_BUCKET_STEP=32 VLLM_CONFIG_HIDDEN_LAYERS=20  ./run.sh  -m ibm-granite/granite-34b-code-instruct-8k  -b 105 -t 1 --multistep 66 |
+|Mistral-Large-Instruct-2407| bf16 | 4 | ./run.sh -m mistralai/Mistral-Large-Instruct-2407  -t 4 -b 72 --multistep 32 |
+|Llama-3.2-90B-Vision-Instruct | bf16 | 4 | ./run.sh -m meta-llama/Llama-3.2-90B-Vision-Instruct  -t 4 -b 63 --multistep 32 --vision | 
+|llama-3.3-70b-instruct | bf16 | 4 | QUANT_CONFIG=/pathto/llama-3.3-70b-instruct/maxabs_quant_g3.json ./run.sh -m meta-llama/llama-3.3-70b-instruct  -t 4  -b 208 --multistep 32 --fp8 | 
+|Mixtral-8x7B-Instruct-v0.1 | bf16 | 1 | ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 1  -b 102 --multistep 32 |
+|CodeLlama-34b-Instruct-hf | bf16 | 1 | ./run.sh  -m meta-llama/CodeLlama-34b-Instruct-hf  -b 98  -t 1 --multistep 66 | 
+|granite-8b-code-instruct-128k | bf16 | 1 | VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh  -m ibm-granite/granite-8b-code-instruct-128k -b 130  -t 1 --multistep 66 | 
