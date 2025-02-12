@@ -108,7 +108,7 @@ The following table contains models and configurations we have validated on Gaud
 |granite-3b-code-instruct-128k| bf16 | 1 | VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh  -m ibm-granite/granite-3b-code-instruct-128k  -b 32  -t 1 --multistep 66 |
 |granite-34b-code-instruct-8k| bf16 |1  |  VLLM_DECODE_BLOCK_BUCKET_STEP=32 VLLM_CONFIG_HIDDEN_LAYERS=20  ./run.sh  -m ibm-granite/granite-34b-code-instruct-8k  -b 105 -t 1 --multistep 66 |
 |Mistral-Large-Instruct-2407| bf16 | 4 | ./run.sh -m mistralai/Mistral-Large-Instruct-2407  -t 4 -b 72 --multistep 32 |
-|Llama-3.2-90B-Vision-Instruct | bf16 | 4 | ./run.sh -m meta-llama/Llama-3.2-90B-Vision-Instruct  -t 4 -b 63 --multistep 32 --vision | 
+|Llama-3.2-90B-Vision-Instruct | bf16 | 4 | ./run.sh -m meta-llama/Llama-3.2-90B-Vision-Instruct  -t 4 -b 64 --multistep 32 --vision | 
 |llama-3.3-70b-instruct | bf16 | 4 | QUANT_CONFIG=/pathto/llama-3.3-70b-instruct/maxabs_quant_g3.json ./run.sh -m meta-llama/llama-3.3-70b-instruct  -t 4  -b 208 --multistep 32 --fp8 | 
 |Mixtral-8x7B-Instruct-v0.1 | bf16 | 1 | ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 1  -b 102 --multistep 32 |
 |CodeLlama-34b-Instruct-hf | bf16 | 1 | ./run.sh  -m meta-llama/CodeLlama-34b-Instruct-hf  -b 98  -t 1 --multistep 66 | 
