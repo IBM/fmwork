@@ -14,9 +14,9 @@ bash Miniconda3-latest-Linux-x86_64.sh
 Create environment and install deps:
 
 ```
-conda create -n vllm-0.6.2 python=3.10 -y
-conda activate  vllm-0.6.2
-pip install vllm==0.6.2
+conda create -n vllm python=3.10 -y
+conda activate  vllm
+pip install vllm
 ```
 
 Get a model (e.g., https://huggingface.co/ibm-granite/granite-8b-code-base-128k):
@@ -30,7 +30,7 @@ Clone repo and run experiment:
 
 ```
 git clone git@github.com:IBM/fmwork.git
-./fmwork/driver --model_path models/granite-8b --input_size 1024 --output_size 1024 --batch_size 1,2,4 --tensor_parallel 1
+./fmwork/infer/vllm/driver --model_path models/granite-8b --input_size 1024 --output_size 1024 --batch_size 1,2,4 --tensor_parallel 1
 ```
 
 This should produce blocks of outputs like:
