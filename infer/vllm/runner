@@ -1,0 +1,183 @@
+#!/bin/bash
+
+SOURCE=${BASH_SOURCE[0]}
+while [ -L "$SOURCE" ]; do
+    SDIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
+    SOURCE=$(readlink "$SOURCE")
+    [[ $SOURCE != /* ]] && SOURCE=$SDIR/$SOURCE; done
+SDIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
+
+if [[ ${#} -lt 19 ]]; then
+    if [[ "${1}" != "-h" && ${1} != "--help" ]]; then
+        echo "error: missing arguments"
+    fi
+
+    echo "  rdir:   root output directory"
+    echo "  mr:     model root directory"
+    echo "  mmtps:  model names and associated tps"
+    echo "  iis:    input sizes  + mode (split|batch)"
+    echo "  oos:    output sizes + mode (split|batch)"
+    echo "  bbs:    batch sizes  + mode (split|batch)"
+    echo "  devs:   devsets (or 'auto')"
+    echo "  sdir:   suffix directory"
+    exit 1
+fi
+
+shift;  rdir=${1}; shift
+shift;    mr=${1}; shift
+shift; mmtps=${1}; shift
+shift;   iis=${1}; shift; iis_mode=${1}; shift
+shift;   oos=${1}; shift; oos_mode=${1}; shift
+shift;   bbs=${1}; shift; bbs_mode=${1}; shift
+shift;  devs=${1}; shift
+shift;  sdir=${1}; shift
+
+if [[ ${iis_mode} == "split" ]]; then iis_for=${iis//,/ }; else iis_for=iis; fi
+if [[ ${oos_mode} == "split" ]]; then oos_for=${oos//,/ }; else oos_for=oos; fi
+if [[ ${bbs_mode} == "split" ]]; then bbs_for=${bbs//,/ }; else bbs_for=bbs; fi
+
+user="$(whoami)"
+host="$(hostname)"
+btim="$(date +%Y%m%d-%H%M%S.%N)"
+bdir="${rdir}/${user}/${host}/${btim}"
+
+mkdir -p ${bdir}
+
+echo
+echo "${bdir}"
+echo
+
+echo "rdir = ${rdir}"               |& tee -a ${bdir}/params
+echo "mr   = ${mr}"                 |& tee -a ${bdir}/params
+echo "mms  = ${mms}"                |& tee -a ${bdir}/params
+echo "iis  = ${iis} ${iis_mode}"    |& tee -a ${bdir}/params
+echo "oos  = ${oos} ${oos_mode}"    |& tee -a ${bdir}/params
+echo "bbs  = ${bbs} ${bbs_mode}"    |& tee -a ${bdir}/params
+echo "devs = ${devs}"               |& tee -a ${bdir}/params
+echo "sdir = ${sdir}"               |& tee -a ${bdir}/params
+echo "@    = ${@}"                  |& tee -a ${bdir}/params
+echo
+
+if [[ ${devs} == auto ]]; then
+    tp_1="0:1:2:3:4:5:6:7"
+    tp_2="0,1:2,3:4,5:6,7"
+    tp_4="0,1,2,3:4,5,6,7"
+    tp_8="0,1,2,3,4,5,6,7"
+else
+    tp_1=$(echo ${devs} | cut -d / -f 1)
+    tp_2=$(echo ${devs} | cut -d / -f 2)
+    tp_4=$(echo ${devs} | cut -d / -f 3)
+    tp_8=$(echo ${devs} | cut -d / -f 4)
+fi
+
+for mmtp in ${mmtps//,/ } ; do
+for ii   in ${iis_for}    ; do
+for oo   in ${oos_for}    ; do
+for bb   in ${bbs_for}    ; do
+
+mm=$(echo ${mmtp} | cut -d ':' -f 1)
+tp=$(echo ${mmtp} | cut -d ':' -f 2)
+
+devsets=$(eval echo \${tp_${tp}})
+if [[ -z "${devsets}" ]]; then continue; fi
+
+etim="$(date +%Y%m%d-%H%M%S.%N)"
+edir="${bdir}/${etim}"
+edir+="/${mm}"
+edir+="/${tp}"
+edir+="/${ii}"
+edir+="/${oo}"
+edir+="/${bb}"
+edir+="/${sdir}"
+
+mkdir -p ${edir}/utils
+
+LOCK=lock-$(hostname)-dev
+
+function lock {
+    local devsets=${1}; shift
+
+    while :; do
+
+        for devset in ${devsets//:/ }; do
+            locked=""
+
+            for dev in ${devset//,/ }; do
+                mkdir ${LOCK}.${dev} &> /dev/null
+
+                if [[ ${?} -eq 0 ]];
+                    then locked+="${dev} "
+                else
+                    for dev in ${locked}; do
+                        rmdir ${LOCK}.${dev} &> /dev/null
+                    done
+                    continue 2
+                fi
+            done
+            break 2 # devset found
+        sleep 1
+        done # try next devset
+    sleep 2
+    done # try next loop
+
+    echo ${devset}
+}
+
+function unlock {
+    local devset=${1}; shift
+
+    for dev in ${devset//,/ }; do
+        rmdir ${LOCK}.${dev}
+    done
+}
+
+devset=$(lock ${devsets})
+
+if [[ ${iis_mode} == "split" ]]; then iis_driver=${ii}; else iis_driver=${iis}; fi
+if [[ ${oos_mode} == "split" ]]; then oos_driver=${oo}; else oos_driver=${oos}; fi
+if [[ ${bbs_mode} == "split" ]]; then bbs_driver=${bb}; else bbs_driver=${bbs}; fi
+
+cmd="
+${SDIR}/driver.datasets
+    --id ${btim}/${etim}
+    -m   ${mr}/${mm}
+    -i   ${iis_driver}
+    -o   ${oos_driver}
+    -b   ${bbs_driver}
+    -t   ${tp}
+    ${@}
+"
+
+function run {
+    export PYTHONUNBUFFERED=1
+    export CUDA_DEVICE_ORDER=PCI_BUS_ID
+    export CUDA_VISIBLE_DEVICES=${devset}
+    env         &> ${edir}/utils/env
+    pip list    &> ${edir}/utils/pip-list
+    echo ${cmd}  > ${edir}/exp.cmd
+    eval ${cmd} &> ${edir}/exp.log
+    sleep 5
+    out=$(ps auxww | grep -v grep | grep driver | grep ${btim}/${etim})
+    if [[ ${?} -eq 0 ]]; then
+        echo "${out}" | tr -s ' ' | cut -d ' ' -f 2 | xargs kill -2
+        sleep 5
+    fi
+    sleep 30
+    unlock ${devset}
+
+    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mDONE\e[0m \e[93m${edir}\e[0m"
+}
+    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mRUN \e[0m \e[93m${edir}\e[0m"
+
+run & # &> ${edir}/exp.log &
+
+sleep 1
+
+done; done; done; done
+
+wait
+
+echo
+echo ${bdir}
+echo
+
