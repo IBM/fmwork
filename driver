@@ -128,7 +128,6 @@ def run(input_size, output_size, batch_size):
     )
 
     kwargs = {
-        'prompt_token_ids' : input_batch,
         'sampling_params'  : sampling_params,
         'use_tqdm'         : False,
     }
@@ -136,6 +135,14 @@ def run(input_size, output_size, batch_size):
     fmwork.reset()
 
     for rep in range(par.reps):
+	# Generate a new prompt for each repetition.
+        input_batch = fmwork.input_generator(
+            par.model_path,
+            input_size, batch_size,
+            return_tensors='np'
+        )
+        kwargs['prompt_token_ids'] = input_batch
+
         fmwork.t0()
         var.llm.generate(**kwargs)
         if par.device == "hpu":
