@@ -47,15 +47,15 @@ echo
 echo "${bdir}"
 echo
 
-echo "rdir = ${rdir}"               |& tee -a ${bdir}/params
-echo "mr   = ${mr}"                 |& tee -a ${bdir}/params
-echo "mms  = ${mms}"                |& tee -a ${bdir}/params
-echo "iis  = ${iis} ${iis_mode}"    |& tee -a ${bdir}/params
-echo "oos  = ${oos} ${oos_mode}"    |& tee -a ${bdir}/params
-echo "bbs  = ${bbs} ${bbs_mode}"    |& tee -a ${bdir}/params
-echo "devs = ${devs}"               |& tee -a ${bdir}/params
-echo "sdir = ${sdir}"               |& tee -a ${bdir}/params
-echo "@    = ${@}"                  |& tee -a ${bdir}/params
+echo "rdir  = ${rdir}"               |& tee -a ${bdir}/params
+echo "mr    = ${mr}"                 |& tee -a ${bdir}/params
+echo "mmtps = ${mmtps}"              |& tee -a ${bdir}/params
+echo "iis   = ${iis} ${iis_mode}"    |& tee -a ${bdir}/params
+echo "oos   = ${oos} ${oos_mode}"    |& tee -a ${bdir}/params
+echo "bbs   = ${bbs} ${bbs_mode}"    |& tee -a ${bdir}/params
+echo "devs  = ${devs}"               |& tee -a ${bdir}/params
+echo "sdir  = ${sdir}"               |& tee -a ${bdir}/params
+echo "@     = ${@}"                  |& tee -a ${bdir}/params
 echo
 
 if [[ ${devs} == auto ]]; then
@@ -162,7 +162,7 @@ function run {
         echo "${out}" | tr -s ' ' | cut -d ' ' -f 2 | xargs kill -2
         sleep 5
     fi
-    sleep 30
+    sleep 5
     unlock ${devset}
 
     echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mDONE\e[0m \e[93m${edir}\e[0m"
