@@ -145,9 +145,9 @@ def runs():
                     if input_size not in oo1: continue
                     if batch_size not in oo1[input_size]: continue
                     ttft = oo1[input_size][batch_size]
-                    gen  = med - ttft
-                    itl  = gen / output_size * 1000.0 # ms
-                    thp  = batch_size * output_size / gen
+                    gen  = med - ttft # generate oo-1 tokens
+                    itl  = gen / (output_size-1) * 1000.0 # ms
+                    thp  = batch_size * (output_size-1) / gen
 
                     print(
                         'FMWORK GEN',
