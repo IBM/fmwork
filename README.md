@@ -9,7 +9,7 @@ Clone and Install vllm in a v1.20.0 Gaudi3 release docker container
 ```
 git clone https://github.com/HabanaAI/vllm-fork.git
 cd vllm-fork
-git checkout c3ce6ae77   # this is on v.1.20.0 branch
+git checkout v0.6.6.post1+Gaudi-1.20.0
 pip install -r requirements-hpu.txt  
 python setup.py develop  
 ```
@@ -113,3 +113,20 @@ The following table contains models and configurations we have validated on Gaud
 |Mixtral-8x7B-Instruct-v0.1 | bf16 | 1 | ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 1  -b 102 --multistep 32 |
 |CodeLlama-34b-Instruct-hf | bf16 | 1 | ./run.sh  -m meta-llama/CodeLlama-34b-Instruct-hf  -b 98  -t 1 --multistep 66 | 
 |granite-8b-code-instruct-128k | bf16 | 1 | VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh  -m ibm-granite/granite-8b-code-instruct-128k -b 130  -t 1 --multistep 66 | 
+
+
+## The below batch sizes are for all FP8 model configs 
+
+| Model | D-Type | Devices | Command |
+|--------------| --------------| --------------| --------------|
+|llama3.1-8b--Instruct| fp8 | 1 | QUANT_CONFIG=/pathto/meta-llama-3.1-8b-instruct/maxabs_quant_g3.json ./run.sh -m models/Meta-Llama-3.1-8B-Instruct -b 220 --multistep 32 --fp8  |
+|llama3.1-405b--Instruct| fp8 | 8 | QUANT_CONFIG=/pathto/meta-llama-3.1-405b-instruct-v2/maxabs_quant_g3.json ./run.sh -m models/Llama-3.1-405B-Instruct -t 8 -b 155 --fp8  --multistep 32 |
+|granite-3.1-8b-instruct| fp8 | 1 | QUANT_CONFIG=/pathto/ibm-granite/granite-3.1-8b-instruct/maxabs_quant_g3.json ./run.sh -m ibm-granite/granite-3.1-8b-instruct -b 190 --multistep 32 --fp8 |
+|granite-20b-code-instruct-8k | fp8 | 1 | QUANT_CONFIG=/pathto/ibm-granite/granite-20b-code-instruct-8k/maxabs_quant_g3.json  VLLM_DECODE_BLOCK_BUCKET_STEP=16 VLLM_CONFIG_HIDDEN_LAYERS=32 ./run.sh -m ibm-granite/granite-20b-code-instruct-8k -b 140 --multistep 32 --block_size 256 --fp8  |
+|Meta-Llama-3.1-70B-Instruct| fp8 | 4 | QUANT_CONFIG=/pathto/models/Meta-Llama-3.1-70B-Instruct/maxabs_quant_g3.json ./run.sh -m models/Meta-Llama-3.1-70B-Instruct/ -t 4  -b 190  --multistep 32 --fp8  |
+|granite-3b-code-instruct-128k| fp8  | 1 | QUANT_CONFIG=/pathto/ibm-granite/granite-3b-code-instruct-128k/maxabs_quant_g3.json  VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh  -m ibm-granite/granite-3b-code-instruct-128k  -b 55  -t 1 --multistep 66 --fp8  |
+|granite-34b-code-instruct-8k| fp8 |1  |  QUANT_CONFIG=/pathto/granite-34b-code-instruct-8k/maxabs_quant_g3.json VLLM_DECODE_BLOCK_BUCKET_STEP=32 VLLM_CONFIG_HIDDEN_LAYERS=20  ./run.sh  -m ibm-granite/granite-34b-code-instruct-8k  -b 210 -t 1 --multistep 66 --fp8 |
+|Mistral-Large-Instruct-2407| fp8 | 4 | QUANT_CONFIG=/pathto/mistral-large-instruct-2407/maxabs_quant_g3.json ./run.sh -m mistralai/Mistral-Large-Instruct-2407  -t 4 -b 125 --multistep 32 --fp8 |
+|llama-3.3-70b-instruct | fp8 | 4 | QUANT_CONFIG=/pathto/llama-3.3-70b-instruct/maxabs_quant_g3.json ./run.sh -m meta-llama/llama-3.3-70b-instruct  -t 4  -b 192 --multistep 32 --fp8 |
+|Mixtral-8x7B-Instruct-v0.1 | fp8 | 1 | QUANT_CONFIG=/pathto/mixtral-8x7b-instruct-v0.1/maxabs_quant_g3.json ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 1  -b 175 --multistep 32 --fp8 |
+|granite-8b-code-instruct-128k | fp8 | 1 | QUANT_CONFIG=/pathto/granite-8b-code-instruct-128k/maxabs_quant_g3.json VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true ./run.sh  -m ibm-granite/granite-8b-code-instruct-128k -b 200  -t 1 --multistep 66 --fp8 |
