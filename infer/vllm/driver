@@ -5,6 +5,7 @@ import fmwork
 import torch
 import traceback
 import vllm
+import os
 
 class var: pass
 class par: pass
@@ -21,6 +22,10 @@ def main():
             par.model_path)
         t1 = fmwork.time_get()
         print(); print('FMWORK DATASET', '%.6f' % (fmwork.time_diff(t1, t0)))
+
+    os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = 'var.input_sizes'
+    os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"]  = 'var.output_sizes'
+    os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = 'var.batch_sizes'
 
     llm()
     runs()
