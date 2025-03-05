@@ -231,7 +231,7 @@ def run(input_size, output_size, batch_size):
     for rep in range(par.reps):
         fmwork.t0()
         outputs = var.llm.generate(**kwargs)
-        torch.cuda.synchronize()
+        #torch.cuda.synchronize()
         ret = fmwork.t1(
             rep, par.reps,
             input_size, output_size, batch_size,
