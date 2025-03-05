@@ -23,10 +23,6 @@ def main():
         t1 = fmwork.time_get()
         print(); print('FMWORK DATASET', '%.6f' % (fmwork.time_diff(t1, t0)))
 
-    os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = 'var.input_sizes'
-    os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"]  = 'var.output_sizes'
-    os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = 'var.batch_sizes'
-
     llm()
     runs()
     done()
@@ -127,7 +123,7 @@ def llm():
         tensor_parallel_size         = par.tensor_parallel,
         trust_remote_code            = True,
         num_scheduler_steps          = par.num_scheduler_steps,
-        use_v2_block_manager         = par.use_v2_block_manager,
+        #use_v2_block_manager         = par.use_v2_block_manager,
         distributed_executor_backend = par.distributed_executor_backend,
         max_num_seqs                 = par.max_num_seqs,
         enable_chunked_prefill       = par.enable_chunked_prefill,
