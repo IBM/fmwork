@@ -1,4 +1,4 @@
-#!/usr/bin/env -S python -u
+#!/usr/bin/env -S python3 -u
 
 import argparse
 import fmwork
@@ -76,6 +76,8 @@ def params():
     parser.add_argument('--debug_outputs', action='store_true')
     parser.add_argument('--trace_outputs', action='store_true')
     parser.add_argument('--stop_itl', type=float)
+    parser.add_argument('-D', '--device',
+        type=str, required=True, choices=['cpu', 'gpu', 'spyre'] )
 
     parser.parse_args(namespace=par)
 
@@ -114,6 +116,7 @@ def llm():
         gpu_memory_utilization       = par.gpu_memory_utilization,
         kv_cache_dtype               = par.kv_cache_dtype,
         max_model_len                = max(var.input_sizes) + max(var.output_sizes),
+        block_size                   = max(var.input_sizes) + max(var.output_sizes),
         model                        = par.model_path,
         quantization                 = par.quantization,
         tensor_parallel_size         = par.tensor_parallel,
@@ -123,6 +126,7 @@ def llm():
         distributed_executor_backend = par.distributed_executor_backend,
         max_num_seqs                 = par.max_num_seqs,
         enable_chunked_prefill       = par.enable_chunked_prefill,
+        device                       = par.device,
     )
 
     t1 = fmwork.time_get()
