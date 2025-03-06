@@ -123,6 +123,9 @@ def llm():
         distributed_executor_backend = par.distributed_executor_backend,
         max_num_seqs                 = par.max_num_seqs,
         enable_chunked_prefill       = par.enable_chunked_prefill,
+        compilation_config = {
+            'cudagraph_capture_sizes': var.batch_sizes,
+        },
     )
 
     t1 = fmwork.time_get()
@@ -156,6 +159,8 @@ def runs():
                         output_size,
                         batch_size,
                         par.tensor_parallel,
+                        '%.1f' % (med / output_size * 1000.0),
+                        '%.1f' % (batch_size * output_size / med),
                         '%.3f' % (med),
                         '%.3f' % (gen),
                         '%.3f' % (ttft),
