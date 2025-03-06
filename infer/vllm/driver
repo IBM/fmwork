@@ -23,6 +23,10 @@ def main():
         t1 = fmwork.time_get()
         print(); print('FMWORK DATASET', '%.6f' % (fmwork.time_diff(t1, t0)))
 
+    os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = par.input_size
+    os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"] = par.output_size
+    os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = par.batch_size
+    
     llm()
     runs()
     done()
