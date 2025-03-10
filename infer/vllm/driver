@@ -5,6 +5,7 @@ import fmwork
 import torch
 import traceback
 import vllm
+from rocm_mad_profiler import MADProfiler
 
 class var: pass
 class par: pass
@@ -76,6 +77,7 @@ def params():
     parser.add_argument('--debug_outputs', action='store_true')
     parser.add_argument('--trace_outputs', action='store_true')
     parser.add_argument('--stop_itl', type=float)
+    parser.add_argument('--enable_prefix_caching', action='store_true')
 
     parser.parse_args(namespace=par)
 
@@ -123,6 +125,7 @@ def llm():
         distributed_executor_backend = par.distributed_executor_backend,
         max_num_seqs                 = par.max_num_seqs,
         enable_chunked_prefill       = par.enable_chunked_prefill,
+        enable_prefix_caching        = par.enable_prefix_caching,
     )
 
     t1 = fmwork.time_get()
@@ -224,7 +227,11 @@ def run(input_size, output_size, batch_size):
     fmwork.reset()
 
     for rep in range(par.reps):
+        input_batch = fmwork.input_generator(par.model_path, input_size, batch_size, return_tensors='np')
+        kwargs['prompt_token_ids'] = input_batch
         fmwork.t0()
+        #with MADProfiler(backend="rpd", nvtx_tracing=True):
+        #    outputs = var.llm.generate(**kwargs)
         outputs = var.llm.generate(**kwargs)
         torch.cuda.synchronize()
         ret = fmwork.t1(
