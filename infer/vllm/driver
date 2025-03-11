@@ -5,7 +5,7 @@ import fmwork
 import torch
 import traceback
 import vllm
-from rocm_mad_profiler import MADProfiler
+#from rocm_mad_profiler import MADProfiler
 
 class var: pass
 class par: pass
