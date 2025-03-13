@@ -11,15 +11,14 @@ if [[ ${#} -lt 19 ]]; then
     if [[ "${1}" != "-h" && ${1} != "--help" ]]; then
         echo "error: missing arguments"
     fi
-
-    echo "  rdir:   root output directory"
-    echo "  mr:     model root directory"
-    echo "  mmtps:  model names and associated tps"
-    echo "  iis:    input sizes  + mode (split|batch)"
-    echo "  oos:    output sizes + mode (split|batch)"
-    echo "  bbs:    batch sizes  + mode (split|batch)"
-    echo "  devs:   devsets (or 'auto')"
-    echo "  sdir:   suffix directory"
+    echo "  rdir:    root output directory"
+    echo "  mr:      model root directory"
+    echo "  mmtps:   model names and associated tps"
+    echo "  iis:     input sizes  + mode (split|batch)"
+    echo "  oos:     output sizes + mode (split|batch)"
+    echo "  bbs:     batch sizes  + mode (split|batch)"
+    echo "  devs:    devsets (or 'auto')"
+    echo "  sdir:    suffix directory"
     exit 1
 fi
 
@@ -35,6 +34,10 @@ shift;  sdir=${1}; shift
 if [[ ${iis_mode} == "split" ]]; then iis_for=${iis//,/ }; else iis_for=iis; fi
 if [[ ${oos_mode} == "split" ]]; then oos_for=${oos//,/ }; else oos_for=oos; fi
 if [[ ${bbs_mode} == "split" ]]; then bbs_for=${bbs//,/ }; else bbs_for=bbs; fi
+
+if [[ -n ${FMWORK_GRADLIB} ]]; then
+    grad=${FMWORK_GRADLIB}
+fi
 
 user="$(whoami)"
 host="$(hostname)"
@@ -55,6 +58,7 @@ echo "oos   = ${oos} ${oos_mode}"    |& tee -a ${bdir}/params
 echo "bbs   = ${bbs} ${bbs_mode}"    |& tee -a ${bdir}/params
 echo "devs  = ${devs}"               |& tee -a ${bdir}/params
 echo "sdir  = ${sdir}"               |& tee -a ${bdir}/params
+echo "grad  = ${grad}"               |& tee -a ${bdir}/params
 echo "@     = ${@}"                  |& tee -a ${bdir}/params
 echo
 
@@ -96,15 +100,11 @@ LOCK=lock-$(hostname)-dev
 
 function lock {
     local devsets=${1}; shift
-
     while :; do
-
         for devset in ${devsets//:/ }; do
             locked=""
-
             for dev in ${devset//,/ }; do
                 mkdir ${LOCK}.${dev} &> /dev/null
-
                 if [[ ${?} -eq 0 ]];
                     then locked+="${dev} "
                 else
@@ -119,13 +119,11 @@ function lock {
         done # try next devset
     sleep 2
     done # try next loop
-
     echo ${devset}
 }
 
 function unlock {
     local devset=${1}; shift
-
     for dev in ${devset//,/ }; do
         rmdir ${LOCK}.${dev}
     done
@@ -148,14 +146,44 @@ ${SDIR}/driver
     ${@}
 "
 
+export VLLM_UNTUNE_FILE=${edir}/untuned.csv
+export   VLLM_TUNE_FILE=${edir}/tuned.csv
+
+tuning_cmd="
+python ${grad}
+    --input_file ${VLLM_UNTUNE_FILE}
+    --tuned_file ${VLLM_TUNE_FILE}
+    --tp ${tp}
+"
+
 function run {
     export PYTHONUNBUFFERED=1
     export CUDA_DEVICE_ORDER=PCI_BUS_ID
     export CUDA_VISIBLE_DEVICES=${devset}
     env         &> ${edir}/utils/env
     pip list    &> ${edir}/utils/pip-list
-    echo ${cmd}  > ${edir}/exp.cmd
-    eval ${cmd} &> ${edir}/exp.log
+
+    # baseline run
+
+    if [[ -n "${grad}" ]]; then
+
+        export VLLM_TUNE_GEMM=1
+
+    fi
+
+    echo ${cmd}  > ${edir}/base.cmd
+    eval ${cmd} &> ${edir}/base.log
+
+    if [[ -n "${grad}" ]]; then
+
+        export VLLM_TUNE_GEMM=0
+        echo ${tuning_cmd} &> ${edir}/tuning.cmd
+        eval ${tuning_cmd} &> ${edir}/tuning.log
+
+        export VLLM_TUNE_GEMM=0
+        eval ${cmd} &> ${edir}/tuned.log
+    fi
+
     sleep 5
     out=$(ps auxww | grep -v grep | grep driver | grep ${btim}/${etim})
     if [[ ${?} -eq 0 ]]; then
@@ -163,6 +191,7 @@ function run {
         sleep 5
     fi
     sleep 5
+
     unlock ${devset}
 
     echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mDONE\e[0m \e[93m${edir}\e[0m"
