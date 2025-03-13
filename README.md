@@ -113,7 +113,7 @@ The following table contains models and configurations we have validated on Gaud
 | granite-34b-code-instruct-8k | bf16 | 1 | PT_HPU_LAZY_MODE=1 VLLM_DECODE_BLOCK_BUCKET_STEP=32 VLLM_CONFIG_HIDDEN_LAYERS=20  ./run.sh  -m ibm-granite/granite-34b-code-instruct-8k  -b 125 --block_size 256 |
 | Mistral-Large-Instruct-2407 | bf16 | 4 | PT_HPU_LAZY_MODE=1 ./run.sh -m mistralai/Mistral-Large-Instruct-2407 -t 4 -b 96 --block_size 256 |
 | Llama-3.2-90B-Vision-Instruct | bf16 | 4 | PT_HPU_LAZY_MODE=1 ./run.sh -m meta-llama/Llama-3.2-90B-Vision-Instruct -t 4 -b 70 --vision --multistep 32 |
-| llama-3.3-70b-instruct | fp8 | 4 | QUANT_CONFIG=/pathto/llama-3.3-70b-instruct/maxabs_quant_g3.json PT_HPU_LAZY_MODE=1 FUSER_ENABLE_LOW_UTILIZATION=1  ./run.sh -m meta-llama/llama-3.3-70b-instruct -t 4 -b 220 --fp8 |
+| llama-3.3-70b-instruct | fp8 | 4 | QUANT_CONFIG=/pathto/llama-3.3-70b-instruct/maxabs_quant_g3.json PT_HPU_LAZY_MODE=1 FUSER_ENABLE_LOW_UTILIZATION=1  ./run.sh -m meta-llama/llama-3.3-70b-instruct -t 4 -b 256 --fp8 |
 | Mixtral-8x7B-Instruct-v0.1 | bf16 | 1 | PT_HPU_LAZY_MODE=1 ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 1 -b 110 |
 | CodeLlama-34b-Instruct-hf | bf16 | 1 | PT_HPU_LAZY_MODE=1 ./run.sh  -m meta-llama/CodeLlama-34b-Instruct-hf -b 108 |
-| granite-8b-code-instruct-128k | bf16 | 1 | VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true PT_HPU_LAZY_MODE=1 ./run.sh  -m ibm-granite/granite-8b-code-instruct-128k -b 140 |
+| granite-8b-code-instruct-128k | bf16 | 1 | VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true PT_HPU_LAZY_MODE=1 ./run.sh  -m ibm-granite/granite-8b-code-instruct-128k -b 150 |
