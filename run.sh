@@ -136,6 +136,7 @@ if [[ -n "$fp8" ]]; then
     else  # If not set, error out if fp8 is enabled
         echo "Error: QUANT_CONFIG environment variable must be set when fp8 is enabled."
         exit 1
+    fi 
 fi
 
 # enable delayed sampling or multi-step scheduling
