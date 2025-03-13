@@ -6,14 +6,12 @@ Taken from https://github.com/IBM/fmwork/tree/main @665d802c2e1e9a756e27f0c40eba
 Changes:
     - add arguments --device, --block_size, --weights_load_device, --num_scheduler_steps and --max_prompt_batch_size
     - setup HPU related vLLM settings
-
+    - remove llm engine explicitly at the end of the script
 """
 
 import argparse
 import fmwork
-import os
 import torch
-import traceback
 import vllm
 
 
@@ -27,7 +25,6 @@ def main():
     llm()
     runs()
     done()
-    os._exit(0)
 
 def params():
 
@@ -151,5 +148,9 @@ def done():
 
     fmwork.banner('DONE')
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    main()
 
+    # Remove llm object explicitly, as it is handled by global variable.
+    # Without this there could be a hang on TP>1
+    del var.llm

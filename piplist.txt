@@ -1,203 +1,357 @@
-Package                           Version                          Editable project location
---------------------------------- -------------------------------- -------------------------
+Package                           Version                         Editable project location
+
+--------------------------------- ------------------------------- -------------------------
+
 absl-py                           2.1.0
-accelerate                        0.33.0
-aiohappyeyeballs                  2.4.4
-aiohttp                           3.11.11
+
+aiohappyeyeballs                  2.5.0
+
+aiohttp                           3.11.13
+
 aiosignal                         1.3.2
-airportsdata                      20241001
+
+airportsdata                      20250224
+
 annotated-types                   0.7.0
-antlr4-python3-runtime            4.9.3
+
 anyio                             4.8.0
+
 astor                             0.8.1
-async-timeout                     5.0.1
+
 attrs                             25.1.0
+
 autocommand                       2.2.2
+
 av                                12.1.0
+
 backports.tarfile                 1.2.0
+
 blake3                            1.0.4
-cachetools                        5.5.1
-certifi                           2025.1.31
-chardet                           5.2.0
-charset-normalizer                3.4.1
+
+cachetools                        5.5.2
+
+certifi                           2024.8.30
+
+charset-normalizer                3.3.2
+
 click                             8.1.8
+
 cloudpickle                       3.1.1
-colorama                          0.4.6
-compressed-tensors                0.8.1
-DataProperty                      1.1.0
-datasets                          2.21.0
+
+compressed-tensors                0.9.1
+
+dbus-python                       1.3.2
+
 depyf                             0.18.0
-diffusers                         0.31.0
-dill                              0.3.8
+
+dill                              0.3.9
+
 diskcache                         5.6.3
+
 distro                            1.9.0
+
+dnspython                         2.7.0
+
 einops                            0.8.1
-exceptiongroup                    1.2.2
+
+email_validator                   2.2.0
+
 expecttest                        0.3.0
-fastapi                           0.115.8
+
+fastapi                           0.115.11
+
+fastapi-cli                       0.0.7
+
 filelock                          3.17.0
+
 frozenlist                        1.5.0
+
 fsspec                            2024.6.1
+
 gguf                              0.10.0
+
 google-auth                       2.38.0
+
 google-auth-oauthlib              0.4.6
+
 grpcio                            1.70.0
+
 h11                               0.14.0
-habana_gpu_migration              1.19.2.32
-habana-media-loader               1.19.2.32
-habana-pyhlml                     1.19.2.32
-habana-torch-dataloader           1.19.2.32
-habana-torch-plugin               1.19.2.32
+
+habana_gpu_migration              1.20.0.543
+
+habana-media-loader               1.20.0.543
+
+habana-pyhlml                     1.20.0.543
+
+habana-torch-dataloader           1.20.0.543
+
+habana-torch-plugin               1.20.0.543
+
 httpcore                          1.0.7
+
 httptools                         0.6.4
+
 httpx                             0.28.1
-huggingface-hub                   0.28.1
+
+huggingface-hub                   0.29.3
+
 idna                              3.10
+
 importlib_metadata                8.6.1
-importlib_resources               6.5.2
+
+importlib_resources               6.4.0
+
 inflect                           7.3.1
+
 iniconfig                         2.0.0
-intel_transformer_engine          1.19.2.32
+
+intel_transformer_engine          1.20.0.543
+
 interegular                       0.3.3
+
 jaraco.collections                5.1.0
+
 jaraco.context                    5.3.0
+
 jaraco.functools                  4.0.1
+
 jaraco.text                       3.12.1
-Jinja2                            3.1.5
-jiter                             0.8.2
-joblib                            1.4.2
-jsonlines                         4.0.0
+
+Jinja2                            3.1.6
+
+jiter                             0.9.0
+
 jsonschema                        4.23.0
+
 jsonschema-specifications         2024.10.1
+
 lark                              1.2.2
-lightning                         2.3.3
+
+lightning                         2.5.0.post0
+
 lightning-habana                  1.6.0
-lightning-utilities               0.12.0
-lm_eval                           0.3.0
-lm-format-enforcer                0.10.9
+
+lightning-utilities               0.13.1
+
+lm-format-enforcer                0.10.11
+
 Markdown                          3.7
-MarkupSafe                        3.0.2
-mbstrdecoder                      1.1.4
-mistral_common                    1.5.2
+
+markdown-it-py                    3.0.0
+
+MarkupSafe                        2.1.5
+
+mdurl                             0.1.2
+
+mistral_common                    1.5.3
+
 more-itertools                    10.3.0
+
 mpi4py                            3.1.6
+
 mpmath                            1.3.0
+
 msgpack                           1.1.0
+
 msgspec                           0.19.0
+
 multidict                         6.1.0
-multiprocess                      0.70.16
+
 nest-asyncio                      1.6.0
-networkx                          3.4.2
-neural_compressor_pt              3.2
-nltk                              3.9.1
-numexpr                           2.10.2
+
+networkx                          3.3
+
+neural_compressor_pt              3.3
+
 numpy                             1.26.4
+
 oauthlib                          3.2.2
-omegaconf                         2.3.0
-openai                            1.61.1
+
+openai                            1.66.3
+
 opencv-python-headless            4.11.0.86
-optimum                           1.24.0
-optimum-habana                    1.15.0                           /root/optimum-habana
+
 outlines                          0.1.11
+
 outlines_core                     0.1.26
+
 packaging                         24.2
+
 pandas                            2.0.1
+
 parameterized                     0.9.0
+
 partial-json-parser               0.2.1.1.post5
+
 pathspec                          0.12.1
-pathvalidate                      3.2.3
-peft                              0.14.0
+
 perfetto                          0.11.0
-pillow                            10.4.0
+
+pillow                            11.1.0
+
 Pillow-SIMD                       9.5.0.post20+habana
-pip                               24.2
+
+pip                               24.0
+
 platformdirs                      4.2.2
+
 pluggy                            1.5.0
-portalocker                       3.1.1
+
 prettytable                       3.9.0
+
 prometheus_client                 0.21.1
+
 prometheus-fastapi-instrumentator 7.0.2
-propcache                         0.2.1
+
+propcache                         0.3.0
+
 protobuf                          3.20.3
+
 psutil                            6.0.0
+
 py-cpuinfo                        9.0.0
-pyarrow                           19.0.0
+
 pyasn1                            0.6.1
+
 pyasn1_modules                    0.4.1
+
 pybind11                          2.10.4
+
 pycountry                         24.6.1
+
 pydantic                          2.10.6
+
 pydantic_core                     2.27.2
+
+Pygments                          2.19.1
+
+PyGObject                         3.48.2
+
 pynvml                            8.0.4
-pytablewriter                     1.2.1
-pytest                            8.3.4
+
+pytest                            8.3.5
+
 python-dateutil                   2.9.0.post0
+
 python-dotenv                     1.0.1
+
+python-multipart                  0.0.20
+
 pytorch-lightning                 2.5.0.post0
+
 pytz                              2025.1
-PyYAML                            6.0
-pyzmq                             26.2.1
-ray                               2.42.0
+
+PyYAML                            6.0.1
+
+pyzmq                             26.3.0
+
+ray                               2.43.0
+
 referencing                       0.36.2
+
 regex                             2023.5.5
+
 requests                          2.32.3
+
 requests-oauthlib                 2.0.0
-rouge_score                       0.1.2
-rpds-py                           0.22.3
+
+rich                              13.9.4
+
+rich-toolkit                      0.13.2
+
+rpds-py                           0.23.1
+
 rsa                               4.9
-sacrebleu                         1.5.0
-safetensors                       0.5.2
-scikit-learn                      1.6.1
-scipy                             1.15.1
-sentence-transformers             3.2.1
+
+safetensors                       0.5.3
+
 sentencepiece                     0.2.0
+
 setuptools                        75.1.0
-setuptools-scm                    8.1.0
+
+setuptools-scm                    8.2.0
+
+shellingham                       1.5.4
+
 six                               1.17.0
+
 sniffio                           1.3.1
-sqlitedict                        2.1.0
-starlette                         0.45.3
+
+starlette                         0.46.1
+
 symengine                         0.11.0
+
 sympy                             1.13.1
-tabledata                         1.3.4
+
 tabulate                          0.9.0
-tcolorpy                          0.1.7
+
 tdqm                              0.0.1
+
 tensorboard                       2.11.2
+
 tensorboard-data-server           0.6.1
+
 tensorboard-plugin-wit            1.8.1
-threadpoolctl                     3.5.0
-tiktoken                          0.7.0
-tokenizers                        0.20.3
-tomli                             2.2.1
-torch                             2.5.1a0+git6fc067b
+
+tiktoken                          0.9.0
+
+tokenizers                        0.21.0
+
+tomli                             2.0.1
+
+torch                             2.6.0+hpu.1.20.0.543.git4952fce
+
 torch_tb_profiler                 0.4.0
-torchaudio                        2.5.1a0+1661daf
-torchdata                         0.9.0+d4bb3e6
-torchmetrics                      1.6.1
-torchtext                         0.18.0a0+9bed85d
-torchvision                       0.20.1a0+3ac97aa
+
+torchaudio                        2.6.0+cpu
+
+torchdata                         0.10.1+cpu
+
+torchmetrics                      1.6.2
+
+torchtext                         0.18.0+cpu
+
+torchvision                       0.21.0+cpu
+
 tqdm                              4.67.1
-tqdm-multiprocess                 0.0.11
-transformers                      4.45.2
+
+transformers                      4.48.3
+
 triton                            3.1.0
+
 typeguard                         4.3.0
-typepy                            1.3.4
+
+typer                             0.15.2
+
 typing_extensions                 4.12.2
+
 tzdata                            2025.1
+
 urllib3                           1.26.20
+
 uvicorn                           0.34.0
+
 uvloop                            0.21.0
-vllm                              0.6.3.dev2001+g6edbcf0d.gaudi119 /root/vllm-fork
-vllm-hpu-extension                0.1.dev68+gd4f37bb
+
+vllm                              0.1.dev1+g02d1110               /root/vllm-fork
+
+vllm-hpu-extension                0.1.dev88+g944aed0
+
 watchfiles                        1.0.4
+
 wcwidth                           0.2.13
-websockets                        14.2
+
+websockets                        15.0.1
+
 Werkzeug                          3.1.3
-wheel                             0.44.0
+
+wheel                             0.43.0
+
 xgrammar                          0.1.11
-xxhash                            3.5.0
+
 yamllint                          1.35.1
+
 yarl                              1.18.3
+
 zipp                              3.21.0
-zstandard                         0.23.0

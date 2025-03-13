@@ -12,6 +12,7 @@ usage() {
     echo "  --vision                 Enable vision model, default disabled"
     echo "  --multistep              Enable multi-step scheduling feature by setting number of scheduled steps larger than 1, default: 1 (feature off)"
     echo "  --block_size             Specify the block size, default is 128 for bf16, 256 for fp8"
+    echo "  --mpbs                   Max prompt batch size"
     echo "  --help                   Display this help message"
     exit 1
 }
@@ -64,6 +65,10 @@ while [[ $# -gt 0 ]]; do
             block_size=$2
             shift 2
             ;;
+        --mpbs)
+            max_prompt_batch_size=$2
+            shift 2
+            ;;
         --help)
             usage
             ;;
@@ -91,19 +96,22 @@ if [[ -z "$block_size" ]]; then
 fi
 
 if [[ -n "$vision" ]]; then
-    max_prompt_batch_size=4
     image_size=256
     num_encoder_tokens=1601 # for current image size
     last_block=$((batch_size * (max_model_len + num_encoder_tokens) / block_size))
 else
-    max_prompt_batch_size=16
     last_block=$((batch_size * max_model_len / block_size))
 fi
 
+first_block=$((batch_size * input_sizes / block_size))
+first_block=$((first_block / block_size * block_size + block_size))
+
 last_block=$((last_block + block_size - 1))
-last_block=$((last_block / block_size))
-last_block=$((last_block * block_size))
-last_block=$((last_block + block_size))
+last_block=$((last_block / block_size * block_size + block_size))
+
+if [ -z ${max_prompt_batch_size+x} ]; then
+    max_prompt_batch_size=4
+fi
 max_num_batched_tokens=$((input_sizes * max_prompt_batch_size))
 
 export VLLM_PROMPT_SEQ_BUCKET_MIN=$input_sizes
@@ -112,6 +120,7 @@ export VLLM_PROMPT_BS_BUCKET_MAX=$max_prompt_batch_size
 export VLLM_DECODE_BS_BUCKET_MIN=$batch_size
 export VLLM_DECODE_BS_BUCKET_STEP=$batch_size
 export VLLM_DECODE_BS_BUCKET_MAX=$batch_size
+export VLLM_DECODE_BLOCK_BUCKET_MIN=$first_block
 export VLLM_DECODE_BLOCK_BUCKET_MAX=$last_block
 
 # setup fp8
@@ -127,11 +136,17 @@ if [[ -n "$fp8" ]]; then
     else  # If not set, error out if fp8 is enabled
         echo "Error: QUANT_CONFIG environment variable must be set when fp8 is enabled."
         exit 1
-    fi
 fi
+
+# enable delayed sampling or multi-step scheduling
+if [[ $scheduled_steps -eq 1 ]]; then
+    export VLLM_DELAYED_SAMPLING=true
+fi
+
 # run benchmark
 export PT_HPU_ENABLE_LAZY_COLLECTIVES=true
 export EXPERIMENTAL_WEIGHT_SHARING=0
+export FUSER_ENABLE_LOW_UTILIZATION=true
 
 if [[ -n "$vision" ]]; then
     python driver_vision \
