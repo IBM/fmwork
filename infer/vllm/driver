@@ -191,15 +191,7 @@ def runs():
                                 '%.1f' % (par.stop_itl))
                             return
 
-def run(input_size, output_size, batch_size):
-
-    fmwork.banner(
-        'RUN',
-        input_size,  '/',
-        output_size, '/',
-        batch_size,  '/',
-        par.tensor_parallel
-    )
+def get_input(input_size, batch_size):
 
     if not par.dataset_path:
 
@@ -215,20 +207,35 @@ def run(input_size, output_size, batch_size):
             par.dataset_mode,
             input_size, batch_size)
 
+    return input_batch
+
+def run(input_size, output_size, batch_size):
+
+    fmwork.banner(
+        'RUN',
+        input_size,  '/',
+        output_size, '/',
+        batch_size,  '/',
+        par.tensor_parallel
+    )
+
     sampling_params = vllm.SamplingParams(
         max_tokens = output_size,
         ignore_eos = par.ignore_eos
     )
 
-    kwargs = {
-        'prompt_token_ids' : input_batch,
-        'sampling_params'  : sampling_params,
-        'use_tqdm'         : False,
-    }
-
     fmwork.reset()
 
     for rep in range(par.reps):
+
+        input_batch = get_input(input_size, batch_size)
+
+        kwargs = {
+            'prompt_token_ids' : input_batch,
+            'sampling_params'  : sampling_params,
+            'use_tqdm'         : False,
+        }
+
         fmwork.t0()
         outputs = var.llm.generate(**kwargs)
         torch.cuda.synchronize()
