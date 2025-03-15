@@ -47,7 +47,7 @@ bdir="${rdir}/${user}/${host}/${btim}"
 mkdir -p ${bdir}
 
 echo
-echo "${bdir}"
+echo "${bdir}" "(PID ${$})"
 echo
 
 echo "rdir  = ${rdir}"               |& tee -a ${bdir}/params
@@ -157,9 +157,19 @@ python ${grad}
 "
 
 function run {
+    pid_runner=${$}
+    pid_run=${BASHPID}
+
+    printf "\e[95m%-15s "     ${devset}
+    printf "\e[94m%-6d %-6d \e[96m%-6s " ${pid_runner} ${pid_run} ""
+    printf "\e[0m\e[100mRUN \e[0m \e[93m${edir}\e[0m"
+    printf "\n"
+
     export PYTHONUNBUFFERED=1
     export CUDA_DEVICE_ORDER=PCI_BUS_ID
     export CUDA_VISIBLE_DEVICES=${devset}
+    export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+
     env         &> ${edir}/utils/env
     pip list    &> ${edir}/utils/pip-list
 
@@ -171,36 +181,63 @@ function run {
 
     fi
 
+    SECONDS=0
     echo ${cmd}  > ${edir}/base.cmd
-    eval ${cmd} &> ${edir}/base.log
+         ${cmd} &> ${edir}/base.log &
+    pid_driver=${!}
 
-    if [[ -n "${grad}" ]]; then
+    printf "\e[95m%-15s "     ${devset}
+    printf "\e[94m%-6d %-6d \e[96m%-6d " ${pid_runner} ${pid_run} ${pid_driver}
+    printf "\e[0m\e[104mSTEP\e[0m \e[93m${edir}\e[0m"
+    printf "/base.log\e[0m %d\n"
 
-        export VLLM_TUNE_GEMM=0
-        echo ${tuning_cmd} &> ${edir}/tuning.cmd
-        eval ${tuning_cmd} &> ${edir}/tuning.log
+    while :; do
+        sleep 1
+        kill -0 ${pid_driver} &> /dev/null
+        if [[ ${?} -ne 0 ]]; then break; fi
+        cat ${edir}/base.log | grep "Memory access fault" &> /dev/null
+        if [[ ${?} -eq 0 ]]; then
+            kill -s TERM ${pid_driver}
+            sleep 5
+            kill -0 ${pid_driver} &> /dev/null
+            if [[ ${?} -ne 0 ]]; then break; fi
+            kill -9 ${pid_driver}
+            sleep 5
+            kill -0 ${pid_driver} &> /dev/null
+            if [[ ${?} -ne 0 ]]; then
+                echo "error: cannot kill ${pid_driver}"
+            fi
+            break
+        fi
+    done
 
-        export VLLM_TUNE_GEMM=0
-        eval ${cmd} &> ${edir}/tuned.log
-    fi
+    printf "\e[95m%-15s "     ${devset}
+    printf "\e[94m%-6d %-6d \e[96m%-6d " ${pid_runner} ${pid_run} ${pid_driver}
+    printf "\e[0m\e[102mDONE\e[0m \e[93m${edir}\e[0m"
+    printf "/base.log\e[0m %d\n" ${SECONDS}
 
-    sleep 5
-    out=$(ps auxww | grep -v grep | grep driver | grep ${btim}/${etim})
-    if [[ ${?} -eq 0 ]]; then
-        echo "${out}" | tr -s ' ' | cut -d ' ' -f 2 | xargs kill -2
+    if [[ -z "${grad}" ]]; then
         sleep 5
+        unlock ${devset}
+        return
     fi
+
+    export VLLM_TUNE_GEMM=0
+    echo ${tuning_cmd} &> ${edir}/gradlib.cmd
+         ${tuning_cmd} &> ${edir}/gradlib.log
+
+    export VLLM_TUNE_GEMM=0
+    echo ${cmd}  > ${edir}/tuned.cmd
+         ${cmd} &> ${edir}/tuned.log
+
     sleep 5
 
     unlock ${devset}
-
-    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mDONE\e[0m \e[93m${edir}\e[0m"
 }
-    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mRUN \e[0m \e[93m${edir}\e[0m"
 
 run & # &> ${edir}/exp.log &
 
-sleep 1
+sleep 2
 
 done; done; done; done
 
