@@ -125,11 +125,13 @@ def setup_input_generate():
         if i in vocab:
             vocab.remove(i)
 
+    # For mllama <|image|> token id is 128256, while <|begin_of_text|> is 12800.
+
     inputs = []
     for b in range(par.batch_size):
         inputs.append({
             'prompt_token_ids':
-                np.random.choice(vocab, size = par.input_size).tolist(),
+                [128000, 128256, 128000] + np.random.choice(vocab, size = par.input_size - 3).tolist(),
             'multi_modal_data' : { 'image': setup_image() },
         })
 
