@@ -224,6 +224,12 @@ def run(input_size, output_size, batch_size):
     fmwork.reset()
 
     for rep in range(par.reps):
+        if not par.dataset_path:
+            kwargs['prompt_token_ids'] = fmwork.input_generator(
+                par.model_path,
+                input_size, batch_size,
+                return_tensors='np'
+            )
         fmwork.t0()
         outputs = var.llm.generate(**kwargs)
         torch.cuda.synchronize()
