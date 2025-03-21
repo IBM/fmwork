@@ -1,4 +1,6 @@
 #!/usr/bin/bash
+FMWORK_PATH=/myworkspace/fmwork
+
 current_date=$(date +"%Y%m%d")
 flagsuffix="mi300_run"
 OUT_DIR=${current_date}_${flagsuffix}
@@ -9,6 +11,8 @@ while [[ "$#" -gt 0 ]]; do
     case $1 in
         --model_name) MODEL_NAME="$2"; shift ;;
         --model_path) DATA_PATH="$2"; shift ;;
+        --gradlibTuning) GRADLIB_TUNING="$2"; shift ;;
+        --tunableOp) TUNABLEOP="$2"; shift ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
     shift
@@ -102,6 +106,37 @@ if [[ $MODEL_NAME == "amd-llama3.1-405b-fp8" ]]; then
     export NCCL_MIN_NCHANNELS=112
 fi
 
+MODEL_PARAMS="--model_path $DATA_PATH --num_scheduler_steps $NUM_SCHEDULER_STEPS --input_size $INP_SIZE --output_size $OUT_SIZE --batch_size $BATCH_SIZE --tensor_parallel $TENSOR_PARALLEL --dtype $DTYPE $ENABLE_PREFIX_CACHING $QUANT $DIST_BACKEND"
 
-./infer/vllm/driver --model_path $DATA_PATH --num_scheduler_steps $NUM_SCHEDULER_STEPS --input_size $INP_SIZE --output_size $OUT_SIZE --batch_size $BATCH_SIZE --tensor_parallel $TENSOR_PARALLEL --dtype $DTYPE $ENABLE_PREFIX_CACHING $QUANT $DIST_BACKEND 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}.txt
+# Run the workload without gradlib tuning and tunableop tuning
+${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}.txt
 
+# Gradlib Tuning Procedure
+if [ $GRADLIB_TUNING == "True" ]; then
+    # First Generate the untuned csv file
+    VLLM_UNTUNE_FILE=/app/vllm_untuned.csv VLLM_TUNE_GEMM=1 ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}_untuned_gradlib.txt
+
+    # git clone --recursive https://github.com/ROCm/vllm.git
+    # Do offline gradlib tuning 
+    python3 vllm/gradlib/gemm_tuner.py --outdtype bf16 --input_file /app/vllm_untuned.csv --tuned_file /app/${MODEL_NAME}_gradlib_tuned.csv
+
+    # Run with tuned to get improved numbers
+    VLLM_TUNE_FILE=/app/${MODEL_NAME}_gradlib_tuned.csv ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}_tuned_gradlib.txt
+fi
+
+# TunableOp Procedure
+if [ $TUNABLEOP == "True" ]; then
+    # Following command will generate tunableop_untuned0.csv
+    PYTORCH_TUNABLEOP_ENABLED=1 PYTORCH_TUNABLEOP_TUNING=0 PYTORCH_TUNABLEOP_RECORD_UNTUNED=1 ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}_untuned_tunableops.txt
+
+    # Next run offline tuning to generate tuned csv file
+    python3 tunableops_offline_tuning.py
+
+    # Run with tuned to get improved numbers
+    PYTORCH_TUNABLEOP_ENABLED=1 PYTORCH_TUNABLEOP_TUNING=0 PYTORCH_TUNABLEOP_FILENAME=tunableop_results_full%d.csv ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}_tuned_tunableops.txt
+fi
+
+# Both Tunableops and gradlib tuning
+if [ $GRADLIB_TUNING == "True" ] && [ $TUNABLEOP == "True" ]; then
+    VLLM_TUNE_FILE=/app/${MODEL_NAME}_gradlib_tuned.csv PYTORCH_TUNABLEOP_ENABLED=1 PYTORCH_TUNABLEOP_TUNING=0 PYTORCH_TUNABLEOP_FILENAME=tunableop_results_full%d.csv ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}_tuned_gradlib_tunableops.txt
+fi
