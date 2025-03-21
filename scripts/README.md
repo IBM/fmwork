@@ -7,7 +7,8 @@ For all of the workloads execpt below use the container:
 **For IBM-Granite 3.1-8B**
 
 ```rocm/vllm-dev:nightly_main_20250225```
-**For Vision Workload** 
+
+**For LLaMa 3.2-90B Vision Workload** 
 
 ```rocm/vllm-dev:nightly_main_20250317```
 
