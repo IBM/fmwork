@@ -1,10 +1,15 @@
 ## Docker container used:
 
-For all of the workloads use the below container:
-rocm/vllm-dev:nightly_aiter_integration_final_20250312
+For all of the workloads execpt below use the container:
 
-For IBM-Granite 3.1-8B --> rocm/vllm-dev:nightly_main_20250225
-For Vision Workload --> rocm/vllm-dev:nightly_main_20250317
+```rocm/vllm-dev:nightly_aiter_integration_final_20250312```
+
+**For IBM-Granite 3.1-8B**
+
+```rocm/vllm-dev:nightly_main_20250225```
+**For Vision Workload** 
+
+```rocm/vllm-dev:nightly_main_20250317```
 
 ## Steps to run the workloads.
 
