@@ -112,20 +112,20 @@ MODEL_PARAMS="--model_path $DATA_PATH --num_scheduler_steps $NUM_SCHEDULER_STEPS
 ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}.txt
 
 # Gradlib Tuning Procedure
-if [ $GRADLIB_TUNING == "True" ]; then
+if [[ $GRADLIB_TUNING == "True" ]]; then
     # First Generate the untuned csv file
     VLLM_UNTUNE_FILE=/app/vllm_untuned.csv VLLM_TUNE_GEMM=1 ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}_untuned_gradlib.txt
 
     # git clone --recursive https://github.com/ROCm/vllm.git
     # Do offline gradlib tuning 
-    python3 vllm/gradlib/gemm_tuner.py --outdtype bf16 --input_file /app/vllm_untuned.csv --tuned_file /app/${MODEL_NAME}_gradlib_tuned.csv
+    python3 gemm_tuner.py --outdtype bf16 --input_file /app/vllm_untuned.csv --tuned_file /app/${MODEL_NAME}_gradlib_tuned.csv
 
     # Run with tuned to get improved numbers
     VLLM_TUNE_FILE=/app/${MODEL_NAME}_gradlib_tuned.csv ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}_tuned_gradlib.txt
 fi
 
 # TunableOp Procedure
-if [ $TUNABLEOP == "True" ]; then
+if [[ $TUNABLEOP == "True" ]]; then
     # Following command will generate tunableop_untuned0.csv
     PYTORCH_TUNABLEOP_ENABLED=1 PYTORCH_TUNABLEOP_TUNING=0 PYTORCH_TUNABLEOP_RECORD_UNTUNED=1 ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}_untuned_tunableops.txt
 
@@ -137,6 +137,6 @@ if [ $TUNABLEOP == "True" ]; then
 fi
 
 # Both Tunableops and gradlib tuning
-if [ $GRADLIB_TUNING == "True" ] && [ $TUNABLEOP == "True" ]; then
+if [[ $GRADLIB_TUNING == "True" ]] && [[ $TUNABLEOP == "True" ]]; then
     VLLM_TUNE_FILE=/app/${MODEL_NAME}_gradlib_tuned.csv PYTORCH_TUNABLEOP_ENABLED=1 PYTORCH_TUNABLEOP_TUNING=0 PYTORCH_TUNABLEOP_FILENAME=tunableop_results_full%d.csv ${FMWORK_PATH}/infer/vllm/driver ${MODEL_PARAMS} 2>&1 | tee ${OUT_DIR}/${MODEL_NAME}_tuned_gradlib_tunableops.txt
 fi
