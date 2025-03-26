@@ -34,6 +34,7 @@ extract_last_folder_name() {
 
 tp_size=1
 scheduled_steps=1
+block_bucket_step=128
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -68,6 +69,18 @@ while [[ $# -gt 0 ]]; do
         --mpbs)
             max_prompt_batch_size=$2
             shift 2
+            ;;
+        --block_bucket_step)
+            block_bucket_step=$2
+            shift 2
+            ;;
+        --enable_prefix_caching)
+            enable_prefix_caching="On"
+            shift 1
+            ;;
+        --tc)
+            torch_compile="On"
+            shift 1
             ;;
         --help)
             usage
@@ -121,6 +134,7 @@ export VLLM_DECODE_BS_BUCKET_MIN=$batch_size
 export VLLM_DECODE_BS_BUCKET_STEP=$batch_size
 export VLLM_DECODE_BS_BUCKET_MAX=$batch_size
 export VLLM_DECODE_BLOCK_BUCKET_MIN=$first_block
+export VLLM_DECODE_BLOCK_BUCKET_STEP=$block_bucket_step
 export VLLM_DECODE_BLOCK_BUCKET_MAX=$last_block
 
 # setup fp8
@@ -142,6 +156,18 @@ fi
 # enable delayed sampling or multi-step scheduling
 if [[ $scheduled_steps -eq 1 ]]; then
     export VLLM_DELAYED_SAMPLING=true
+fi
+
+# enable automatic prefix caching
+if [[ -n "$enable_prefix_caching" ]]; then
+    EXTRA_FLAGS+="--enable_prefix_caching "
+fi
+
+# enable torch compile
+if [[ $torch_compile == "On" ]]; then
+    export PT_HPU_LAZY_MODE=0
+else
+    export PT_HPU_LAZY_MODE=1
 fi
 
 # run benchmark
