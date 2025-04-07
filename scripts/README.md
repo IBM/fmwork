@@ -60,4 +60,4 @@ Note: MODEL_NAME is a required parameter and MODEL_PATH is optional. gradlibTuni
 3. VLLM_USE_TRITON_FLASH_ATTN=0 ./driver --model_path models/Llama-3.2-90B-Vision-Instruct --input_size 1024 --output_size 1024  --batch_size 40  --tensor_parallel_size 4  --image_width 256 --image_height 256
 
 ## Steps to run perplexity script
-python /app/vllm/benchmarks/P3L.py --model <model> --context-len 1024 --sample-size 1024 --kv-cache-dtype fp8 
+python /app/vllm/benchmarks/P3L.py --model <model> --context-size 1024 --sample-size 1024 --patch-size 20 [--kv-cache-dtype fp8]
