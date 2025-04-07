@@ -59,6 +59,8 @@ def params():
     parser.add_argument('--max_num_batched_tokens', type=int, default=1024)
     parser.add_argument('--weights_load_device', type=str, default=None)
     parser.add_argument("--num_scheduler_steps", type=int, default=1)
+    parser.add_argument("--enable_prefix_caching", action="store_true")
+    parser.add_argument("--split_qkv", action="store_true")
     parser.parse_args(namespace=par)
 
     attrs = []
@@ -94,6 +96,8 @@ def llm():
         max_num_seqs           = max(var.batch_sizes),
         weights_load_device    = par.weights_load_device,
         num_scheduler_steps    = par.num_scheduler_steps,
+        enable_prefix_caching  = par.enable_prefix_caching,
+        split_qkv              = par.split_qkv,
     )
 
 def runs():

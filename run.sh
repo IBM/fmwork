@@ -13,6 +13,11 @@ usage() {
     echo "  --multistep              Enable multi-step scheduling feature by setting number of scheduled steps larger than 1, default: 1 (feature off)"
     echo "  --block_size             Specify the block size, default is 128 for bf16, 256 for fp8"
     echo "  --mpbs                   Max prompt batch size"
+    echo "  --block_bucket_step      Specify the block bucket step, default is 128"
+    echo "  --enable_prefix_caching  Enables automatic prefix caching, disabled by default"
+    echo "  --tc                     Enable options for torch.compile"
+    echo "  --split_qkv              Enable split qkv, default disabled"
+    echo "  --layers_per_graph       Number of layers per graph, default is 1"
     echo "  --help                   Display this help message"
     exit 1
 }
@@ -82,6 +87,14 @@ while [[ $# -gt 0 ]]; do
             torch_compile="On"
             shift 1
             ;;
+        --split_qkv)
+            split_qkv="On"
+            shift 1
+            ;;
+        --layers_per_graph)
+            layers_per_graph=$2
+            shift 2
+            ;;
         --help)
             usage
             ;;
@@ -116,11 +129,8 @@ else
     last_block=$((batch_size * max_model_len / block_size))
 fi
 
-first_block=$((batch_size * input_sizes / block_size))
-first_block=$((first_block / block_size * block_size + block_size))
-
-last_block=$((last_block + block_size - 1))
-last_block=$((last_block / block_size * block_size + block_size))
+first_block=$((batch_size * (input_sizes + block_size) / block_size))
+last_block=$((last_block + block_bucket_step))
 
 if [ -z ${max_prompt_batch_size+x} ]; then
     max_prompt_batch_size=4
@@ -136,6 +146,13 @@ export VLLM_DECODE_BS_BUCKET_MAX=$batch_size
 export VLLM_DECODE_BLOCK_BUCKET_MIN=$first_block
 export VLLM_DECODE_BLOCK_BUCKET_STEP=$block_bucket_step
 export VLLM_DECODE_BLOCK_BUCKET_MAX=$last_block
+
+# enable torch compile
+if [[ $torch_compile == "On" ]]; then
+    export PT_HPU_LAZY_MODE=0
+else
+    export PT_HPU_LAZY_MODE=1
+fi
 
 # setup fp8
 EXTRA_FLAGS=""
@@ -158,22 +175,27 @@ if [[ $scheduled_steps -eq 1 ]]; then
     export VLLM_DELAYED_SAMPLING=true
 fi
 
+# setup number of layers per graph
+if [[ -n "$layers_per_graph" ]]; then
+    export VLLM_CONFIG_HIDDEN_LAYERS=$layers_per_graph
+fi
+
 # enable automatic prefix caching
 if [[ -n "$enable_prefix_caching" ]]; then
     EXTRA_FLAGS+="--enable_prefix_caching "
 fi
 
-# enable torch compile
-if [[ $torch_compile == "On" ]]; then
-    export PT_HPU_LAZY_MODE=0
-else
-    export PT_HPU_LAZY_MODE=1
+# enable split qkv
+if [[ -n "$split_qkv" ]]; then
+    EXTRA_FLAGS+="--split_qkv "
 fi
 
 # run benchmark
 export PT_HPU_ENABLE_LAZY_COLLECTIVES=true
 export EXPERIMENTAL_WEIGHT_SHARING=0
 export FUSER_ENABLE_LOW_UTILIZATION=true
+export ENABLE_FUSION_BEFORE_NORM=true
+export VLLM_USE_V1=0
 
 if [[ -n "$vision" ]]; then
     python driver_vision \
