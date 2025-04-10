@@ -15,7 +15,7 @@ VLLM_USE_TRITON_FLASH_ATTN=0  ./infer/vllm/driver --model_path /data/Llama-3.2-9
 VLLM_USE_TRITON_FLASH_ATTN=0 ./infer/vllm/driver --model_path /data/Llama-3.1-70B-Instruct --input_size 1024 --output_size 1024 --batch_size 96 --tensor_parallel 4 --dtype bfloat16 --num_scheduler_steps 32 --enable_prefix_caching --distributed_executor_backend ray 2>&1 | tee Llama-3.1-70B-bf16-tp4-bs96.txt
 
 #Rocm 6.4
-VLLM_USE_AITER=1 VLLM_USE_AITER_PAGED_ATTN=1 VLLM_USE_TRITON_FLASH_ATTN=0 ./infer/vllm/driver --model_path /data/granite-34b-code-instruct-8k/ --input_size 1024 --output_size 1024 --tensor_parallel 1 --batch_size 88 --dtype bfloat16 --num_scheduler_steps 32 --enable_prefix_caching  --kv_cache_dtype fp8 2>&1 | tee granite-34b-code-bf16-tp1-bs88-aiter-attn-kvcache-fp8.txt
+VLLM_USE_AITER=1 VLLM_USE_AITER_PAGED_ATTN=1 VLLM_USE_TRITON_FLASH_ATTN=0 ./infer/vllm/driver --model_path /data/granite-34b-code-instruct-8k/ --input_size 1024 --output_size 1024 --tensor_parallel 1 --batch_size 96 --dtype bfloat16 --num_scheduler_steps 32 --enable_prefix_caching  --kv_cache_dtype fp8 2>&1 | tee granite-34b-code-bf16-tp1-bs96-aiter-attn-kvcache-fp8.txt
 
 VLLM_USE_AITER=1 VLLM_USE_TRITON_FLASH_ATTN=0 ./infer/vllm/driver --model_path /data/mixtral-8x7b/ --input_size 1024 --output_size 1024 --batch_size 96 --tensor_parallel 1 --dtype bfloat16 --num_scheduler_steps 32  2>&1 | tee  mixtral-8x7b-bf16-tp1-bs96-aiter.txt
 
