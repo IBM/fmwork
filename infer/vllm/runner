@@ -47,16 +47,17 @@ echo
 echo "${bdir}"
 echo
 
-echo "rdir = ${rdir}"               |& tee -a ${bdir}/params
-echo "mr   = ${mr}"                 |& tee -a ${bdir}/params
-echo "mms  = ${mms}"                |& tee -a ${bdir}/params
-echo "iis  = ${iis} ${iis_mode}"    |& tee -a ${bdir}/params
-echo "oos  = ${oos} ${oos_mode}"    |& tee -a ${bdir}/params
-echo "bbs  = ${bbs} ${bbs_mode}"    |& tee -a ${bdir}/params
-echo "devs = ${devs}"               |& tee -a ${bdir}/params
-echo "sdir = ${sdir}"               |& tee -a ${bdir}/params
-echo "@    = ${@}"                  |& tee -a ${bdir}/params
-echo
+json_object="{"
+for arg in "$@"
+do
+    key=$(echo $arg | cut -d ' ' -f 1)
+    value=$(echo $arg | cut -d ' ' -f 2)
+    json_object+="\"$key\":\"$value\","
+done
+
+json_object="${json_object%,}}"
+formatted_json=$(echo $json_object | jq '.')
+echo "$formatted_json" > ${bdir}/params.json
 
 if [[ ${devs} == auto ]]; then
     tp_1="0:1:2:3:4:5:6:7"
@@ -83,12 +84,6 @@ if [[ -z "${devsets}" ]]; then continue; fi
 
 etim="$(date +%Y%m%d-%H%M%S.%N)"
 edir="${bdir}/${etim}"
-edir+="/${mm}"
-edir+="/${tp}"
-edir+="/${ii}"
-edir+="/${oo}"
-edir+="/${bb}"
-edir+="/${sdir}"
 
 mkdir -p ${edir}/utils
 
