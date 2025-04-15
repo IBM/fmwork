@@ -21,7 +21,7 @@ VLLM_USE_AITER=1 VLLM_USE_TRITON_FLASH_ATTN=0 ./infer/vllm/driver --model_path /
 
 VLLM_USE_AITER=1 VLLM_USE_AITER_PAGED_ATTN=1 VLLM_USE_TRITON_FLASH_ATTN=0  ./infer/vllm/driver --model_path /data/CodeLlama-34b-Instruct-hf --input_size 1024 --output_size 1024  --batch_size 96 --tensor_parallel 1 --dtype bfloat16  --num_scheduler_steps 32  --kv_cache_dtype fp8 2>&1 | tee CodeLlama-34b-bf16-tp1-bs96-aiter-attn-kvcache-fp8.txt
 
-VLLM_USE_AITER=1 VLLM_USE_AITER_PAGED_ATTN=1 VLLM_USE_TRITON_FLASH_ATTN=0 ./infer/vllm/driver --model_path /data/granite-3b-code-instruct-128k/ --input_size 1024 --output_size 1024 --batch_size 56 --tensor_parallel 1 --dtype bfloat16 --num_scheduler_steps 32 --enable_prefix_caching --kv_cache_dtype fp8 2>&1 | tee granite-3b-code-bf16-tp1-bs56-aiter-attn-kvcache-fp8.txt
+VLLM_USE_AITER=1 VLLM_USE_TRITON_FLASH_ATTN=0 ./infer/vllm/driver --model_path /data/granite-3b-code-instruct-128k/ --input_size 1024 --output_size 1024 --batch_size 56 --tensor_parallel 1 --dtype bfloat16 --num_scheduler_steps 32 --enable_prefix_caching --kv_cache_dtype fp8 2>&1 | tee granite-3b-code-bf16-tp1-bs56-aiter-attn-kvcache-fp8.txt
 
 VLLM_USE_AITER=1 VLLM_USE_AITER_PAGED_ATTN=1 VLLM_USE_TRITON_FLASH_ATTN=0 ./infer/vllm/driver --model_path /data/Llama-3.1-8B-Instruct --input_size 1024 --output_size 1024 --batch_size 192 --tensor_parallel 1 --dtype bfloat16 --kv_cache_dtype fp8 --num_scheduler_steps 32 --enable_prefix_caching --gpu_memory_utilization 0.95 --distributed_executor_backend ray 2>&1 | tee Llama-3.1-8B-bf16-tp1-bs192-aiter-attn-kvcache-fp8.txt
 
