@@ -47,17 +47,15 @@ echo
 echo "${bdir}"
 echo
 
-paramsjson="{"
-for arg in "$@"
-do
-    key=$(echo $arg | cut -d ' ' -f 1)
-    value=$(echo $arg | cut -d ' ' -f 2)
-    paramsjson+="\"$key\":\"$value\","
+paramsjson=$(jq "{}" | fromjson)
+
+for ((i=1; i<$#; i+=2)); do
+    key="${!i}"
+    value="${!i+1}"
+    paramsjson=$(jq ".${key} = \"$value\"" "$json_output")
 done
 
-paramsjson="${paramsjson%,}}"
-formattedparams=$(echo $paramsjson | jq '.')
-echo "$formattedparams" > ${bdir}/params.json
+echo "$paramsjson" > ${bdir}/params.json
 
 if [[ ${devs} == auto ]]; then
     tp_1="0:1:2:3:4:5:6:7"
