@@ -123,8 +123,6 @@ def run(input_size, output_size, batch_size, rep):
     print(); print(len(tokens), len(tokens[0]))
     print(); print(repr(var.tokenizer.decode(tokens[0])))
 
-    return
-
     completion = var.client.completions.create(
         prompt     = tokens,
         min_tokens = output_size,
