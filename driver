@@ -140,6 +140,9 @@ def run(input_size, output_size, batch_size, rep):
 
     print(); print(completion)
 
+    itl = completion_time * 1000.0 / output_size
+    thp = batch_size * output_size / completion_time
+
     print(); print('FMWORK REP',
         par.model,
         input_size,
@@ -149,10 +152,13 @@ def run(input_size, output_size, batch_size, rep):
         prompt_tokens,
         completion_tokens,
         '|',
-        '%.9f' % (queue_time),
-        '%.9f' % (prompt_time),
-        '%.9f' % (completion_time),
-        '%.9f' % (total_time),
+        '%.6f' % (queue_time),
+        '%.6f' % (prompt_time),
+        '%.6f' % (completion_time),
+        '%.6f' % (total_time),
+        '|',
+        '%.3f' % (itl),
+        '%.3f' % (thp),
     )
 
     print()
