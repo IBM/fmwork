@@ -5,6 +5,7 @@ import json
 import numpy
 import os
 import random
+import requests
 import time
 
 from cerebras.cloud.sdk import Cerebras
@@ -122,6 +123,29 @@ def run(input_size, output_size, batch_size, rep):
     print(); print(tokens)
     print(); print(len(tokens), len(tokens[0]))
     print(); print(repr(var.tokenizer.decode(tokens[0])))
+
+    '''
+    api_key = os.environ['CEREBRAS_API_KEY']
+
+    response = requests.post(
+        'https://api.cerebras.ai/v1/completions',
+        headers = {
+            'Authorization': 'Bearer %s' % (api_key),
+            'Content-Type': 'application/json',
+        },
+        json = {
+            'prompt': 'hello, world',
+            'min_tokens': output_size,
+            'max_tokens': output_size,
+            'model': par.model,
+        },
+    )
+
+    print(); print(response)
+    print(); print(json.dumps(response.json(), indent=2))
+
+    exit(0)
+    '''
 
     completion = var.client.completions.create(
         prompt     = tokens,
