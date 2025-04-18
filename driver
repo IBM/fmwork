@@ -125,9 +125,9 @@ def runs():
 
 def run(input_size, output_size, batch_size, rep):
 
-    time.sleep(par.sleep)
-
     banner('RUN', par.model, input_size, output_size, batch_size)
+
+    time.sleep(par.sleep)
 
     tokens = input_dataset(input_size, batch_size)
 
