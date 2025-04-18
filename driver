@@ -30,13 +30,24 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add = parser.add_argument
-    parser.add('--model',        type=str, required=True)
-    parser.add('--dataset',      type=str, required=True)
-    parser.add('--input_sizes',  type=str, required=True)
-    parser.add('--output_sizes', type=str, required=True)
-    parser.add('--batch_sizes',  type=str, required=True)
-    parser.add('--reps',         type=int, required=True)
+    parser.add('--model',        type=str,   required=True)
+    parser.add('--dataset',      type=str,   required=True)
+    parser.add('--input_sizes',  type=str,   required=True)
+    parser.add('--output_sizes', type=str,   required=True)
+    parser.add('--batch_sizes',  type=str,   required=True)
+    parser.add('--reps',         type=int,   required=True)
+    parser.add('--sleep',        type=float, required=True)
     parser.parse_args(namespace=par)
+
+    attrs = []
+    for attr in dir(par):
+        if not attr.startswith('__') and not attr.endswith('__'):
+            attrs.append(attr)
+    pad = max([len(x) for x in attrs])
+    for attr in sorted(attrs):
+        print('%-*s = %s' % (
+            pad, attr, getattr(par, attr)))
+    print()
 
     var.input_sizes  = list(map(int, par.input_sizes.split(',')))
     var.output_sizes = list(map(int, par.output_sizes.split(',')))
@@ -114,7 +125,7 @@ def runs():
 
 def run(input_size, output_size, batch_size, rep):
 
-    time.sleep(1)
+    time.sleep(par.sleep)
 
     banner('RUN', par.model, input_size, output_size, batch_size)
 
