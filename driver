@@ -53,7 +53,7 @@ def setup_tokenizer():
         'llama3.1-8b' :
             'meta-llama/Meta-Llama-3.1-8B',
         'llama-3.3-70b' :
-            'meta-llama/Llama-3.3-70B',
+            'meta-llama/Meta-Llama-3-70B',
         'deepseek-r1-distill-llama-70b' :
             'deepseek-ai/deepseek-r1-distill-llama-70b',
         'llama-4-scout-17b-16e-instruct' :
@@ -75,13 +75,16 @@ def setup_dataset():
     var.dataset = []
 
     for item in tqdm(data, total = len(data), desc = 'Processing dataset'):
+
         prompt = ''
+
         for message in item['conversations']:
             prompt += '[' + message['from'] + ']' + '\n\n'
             prompt += message['value'] + '\n\n'
+
         prompt = prompt.strip()
 
-    var.dataset.append(prompt)
+        var.dataset.append(prompt)
 
 def setup_cerebras():
 
@@ -110,6 +113,8 @@ def runs():
 
 def run(input_size, output_size, batch_size, rep):
 
+    time.sleep(1)
+
     banner('RUN', par.model, input_size, output_size, batch_size)
 
     tokens = input_dataset(input_size, batch_size)
@@ -117,6 +122,8 @@ def run(input_size, output_size, batch_size, rep):
     print(); print(tokens)
     print(); print(len(tokens), len(tokens[0]))
     print(); print(repr(var.tokenizer.decode(tokens[0])))
+
+    return
 
     completion = var.client.completions.create(
         prompt     = tokens,
