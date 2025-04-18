@@ -1,0 +1,6 @@
+*.swo
+*.swp
+OUT*
+test.py
+tokenizers/
+.locks/
