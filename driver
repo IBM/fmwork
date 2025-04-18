@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import numpy
+import os
+import random
+import time
+
+from cerebras.cloud.sdk import Cerebras
+from tqdm import tqdm
+from transformers import AutoTokenizer
+
+def banner(*s):
+    print(); print(80*'-');
+    print(' '.join(list(map(str,s))));
+    print(80*'-'); print()
+
+def time_get(): return time.time_ns()
+def time_diff(t1, t0): return float(t1 - t0) / 1E9
+def time_fmt(t): t = str(t).zfill(9); return '%s.%s' % (t[:-9], t[-9:])
+
+class par: pass
+class var: pass
+
+def main():
+
+    banner('SETUP')
+
+    parser = argparse.ArgumentParser()
+    parser.add = parser.add_argument
+    parser.add('--model',        type=str, required=True)
+    parser.add('--dataset',      type=str, required=True)
+    parser.add('--input_sizes',  type=str, required=True)
+    parser.add('--output_sizes', type=str, required=True)
+    parser.add('--batch_sizes',  type=str, required=True)
+    parser.add('--reps',         type=int, required=True)
+    parser.parse_args(namespace=par)
+
+    var.input_sizes  = list(map(int, par.input_sizes.split(',')))
+    var.output_sizes = list(map(int, par.output_sizes.split(',')))
+    var.batch_sizes  = list(map(int, par.batch_sizes.split(',')))
+
+    setup_tokenizer()
+    setup_dataset()
+    setup_cerebras()
+
+    runs()
+
+def setup_tokenizer():
+
+    tokenizer_map = {
+        'llama3.1-8b' :
+            'meta-llama/Meta-Llama-3.1-8B',
+        'llama-3.3-70b' :
+            'meta-llama/Llama-3.3-70B',
+        'deepseek-r1-distill-llama-70b' :
+            'deepseek-ai/deepseek-r1-distill-llama-70b',
+        'llama-4-scout-17b-16e-instruct' :
+            'meta-llama/Llama-4-scout-17b-16e-instruct',
+    }
+
+    var.tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_map[par.model],
+        cache_dir = './tokenizers',
+        local_files_only = False,
+    )
+
+    var.tokenizer.pad_token = var.tokenizer.eos_token
+
+def setup_dataset():
+
+    data = json.load(open(par.dataset))
+
+    var.dataset = []
+
+    for item in tqdm(data, total = len(data), desc = 'Processing dataset'):
+        prompt = ''
+        for message in item['conversations']:
+            prompt += '[' + message['from'] + ']' + '\n\n'
+            prompt += message['value'] + '\n\n'
+        prompt = prompt.strip()
+
+    var.dataset.append(prompt)
+
+def setup_cerebras():
+
+    var.client = Cerebras()
+
+def input_dataset(input_size, batch_size):
+
+    result = [ [] for _ in range(batch_size) ]
+
+    for b in range(batch_size):
+        prompt = random.choice(var.dataset)
+        tokens = var.tokenizer(prompt)['input_ids']
+        while len(result[b]) < input_size:
+            result[b] += tokens
+        result[b] = result[b][:input_size]
+
+    return result
+
+def runs():
+
+    for input_size in var.input_sizes:
+        for batch_size in var.batch_sizes:
+            for output_size in var.output_sizes:
+                for rep in range(par.reps):
+                    run(input_size, output_size, batch_size, rep)
+
+def run(input_size, output_size, batch_size, rep):
+
+    banner('RUN', par.model, input_size, output_size, batch_size)
+
+    tokens = input_dataset(input_size, batch_size)
+
+    print(); print(tokens)
+    print(); print(len(tokens), len(tokens[0]))
+    print(); print(repr(var.tokenizer.decode(tokens[0])))
+
+    completion = var.client.completions.create(
+        prompt     = tokens,
+        min_tokens = output_size,
+        max_tokens = output_size,
+        model      = par.model,
+    )
+
+    completion_time = completion.time_info.completion_time
+    prompt_time     = completion.time_info.prompt_time
+    queue_time      = completion.time_info.queue_time
+    total_time      = completion.time_info.total_time
+
+    completion_tokens = completion.usage.completion_tokens
+    prompt_tokens     = completion.usage.prompt_tokens
+
+    print(); print(completion)
+
+    print(); print('FMWORK REP',
+        par.model,
+        input_size,
+        output_size,
+        batch_size,
+        '|',
+        prompt_tokens,
+        completion_tokens,
+        '|',
+        '%.9f' % (queue_time),
+        '%.9f' % (prompt_time),
+        '%.9f' % (completion_time),
+        '%.9f' % (total_time),
+    )
+
+    print()
+
+if __name__ == '__main__':
+    main()
+
