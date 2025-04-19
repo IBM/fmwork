@@ -167,6 +167,7 @@ def t1(
     print(
         'FMWORK REP',
         '%3d / %3d :' % (rep + 1, reps),
+        input_size, output_size, batch_size, tensor_parallel,
         '%s %s' % (time_fmt(var.t0s[-1]), time_fmt(var.t1s[-1])),
         '%.3f' % (dt),                            # rep time (s)
         '%.1f' % (1000.0 * dt / output_size),     # inter-token latency (ms)

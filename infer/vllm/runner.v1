@@ -138,7 +138,7 @@ if [[ ${oos_mode} == "split" ]]; then oos_driver=${oo}; else oos_driver=${oos}; 
 if [[ ${bbs_mode} == "split" ]]; then bbs_driver=${bb}; else bbs_driver=${bbs}; fi
 
 cmd="
-${SDIR}/driver
+${SDIR}/driver.v1
     --id ${btim}/${etim}
     -m   ${mr}/${mm}
     -i   ${iis_driver}
