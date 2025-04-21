@@ -78,6 +78,8 @@ def params():
     parser.add_argument('--trace_outputs', action='store_true')
     parser.add_argument('--stop_itl', type=float)
     parser.add_argument('--enable_prefix_caching', action='store_true')
+    parser.add_argument('--max_seq_len_to_capture', type=int)
+    parser.add_argument('--max_num_batched_tokens', type=int)
 
     parser.parse_args(namespace=par)
 
@@ -110,6 +112,10 @@ def llm():
 
     t0 = fmwork.time_get()
 
+    # Include these parameters only if set; otherwise let internal vLLM logic set them.
+    optional_params = {"max_seq_len_to_capture", "max_num_batched_tokens"}
+    kwargs = {param: getattr(par, param) for param in optional_params if getattr(par, param) is not None}
+
     var.llm = vllm.LLM(
         dtype                        = par.dtype,
         enforce_eager                = par.enforce_eager,
@@ -126,6 +132,7 @@ def llm():
         max_num_seqs                 = par.max_num_seqs,
         enable_chunked_prefill       = par.enable_chunked_prefill,
         enable_prefix_caching        = par.enable_prefix_caching,
+        **kwargs
     )
 
     t1 = fmwork.time_get()
