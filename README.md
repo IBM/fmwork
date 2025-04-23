@@ -102,18 +102,43 @@ The following table contains models and configurations we have validated on Gaud
 
 The following table contains models and configurations we have validated on Gaudi3.
 
-| Model | D-Type | Devices | Command |
-|--------------| --------------| --------------| --------------|
-| llama3.1-8b--Instruct | bf16 | 1 | PT_HPU_LAZY_MODE=1 ./run.sh -m meta-llama/Meta-Llama-3.1-8B-Instruct -b 170 |
-| llama3.1-405b--Instruct | fp8 | 8 | QUANT_CONFIG=/pathto/llama-3.1-405b-instruct-v2/maxabs_quant_g3.json PT_HPU_LAZY_MODE=1 ./run.sh -m meta-llama/Llama-3.1-405B-Instruct -t 8 -b 160 --fp8 |
-| granite-3.1-8b-instruct | bf16 | 1 | PT_HPU_LAZY_MODE=1 ./run.sh -m ibm-granite/granite-3.1-8b-instruct -b 132 |
-| granite-20b-code-instruct-8k | bf16 | 1 | PT_HPU_LAZY_MODE=1 ENABLE_EXPERIMENTAL_FLAGS=1 AVOID_CD_SPLIT=true VLLM_CONFIG_HIDDEN_LAYERS=32 ./run.sh -m ibm-granite/granite-20b-code-instruct-8k -b 76 --block_size 256 |
-| Meta-Llama-3.1-70B-Instruct | bf16 | 4 | PT_HPU_LAZY_MODE=1 ./run.sh -m meta-llama/Meta-Llama-3.1-70B-Instruct -t 4 -b 200 |
-| granite-3b-code-instruct-128k | bf16 | 1 | PT_HPU_LAZY_MODE=1 VLLM_CONFIG_HIDDEN_LAYERS=32 VLLM_DECODE_BLOCK_BUCKET_STEP=16 ENABLE_EXPERIMENTAL_FLAGS=1 FUSER_ENABLE_LOW_UTILIZATION=true AVOID_CD_SPLIT=true ./run.sh -m ibm-granite/granite-3b-code-instruct-128k -b 40 |
-| granite-34b-code-instruct-8k | bf16 | 1 | PT_HPU_LAZY_MODE=1 VLLM_DECODE_BLOCK_BUCKET_STEP=32 VLLM_CONFIG_HIDDEN_LAYERS=20  ./run.sh  -m ibm-granite/granite-34b-code-instruct-8k  -b 125 --block_size 256 |
-| Mistral-Large-Instruct-2407 | bf16 | 4 | PT_HPU_LAZY_MODE=1 ./run.sh -m mistralai/Mistral-Large-Instruct-2407 -t 4 -b 96 --block_size 256 |
-| Llama-3.2-90B-Vision-Instruct | bf16 | 4 | PT_HPU_LAZY_MODE=1 ./run.sh -m meta-llama/Llama-3.2-90B-Vision-Instruct -t 4 -b 70 --vision --multistep 32 |
-| llama-3.3-70b-instruct | fp8 | 4 | QUANT_CONFIG=/pathto/llama-3.3-70b-instruct/maxabs_quant_g3.json PT_HPU_LAZY_MODE=1 FUSER_ENABLE_LOW_UTILIZATION=1  ./run.sh -m meta-llama/llama-3.3-70b-instruct -t 4 -b 256 --fp8 |
-| Mixtral-8x7B-Instruct-v0.1 | bf16 | 1 | PT_HPU_LAZY_MODE=1 ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 1 -b 110 |
-| CodeLlama-34b-Instruct-hf | bf16 | 1 | PT_HPU_LAZY_MODE=1 ./run.sh  -m meta-llama/CodeLlama-34b-Instruct-hf -b 108 |
-| granite-8b-code-instruct-128k | bf16 | 1 | VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true PT_HPU_LAZY_MODE=1 ./run.sh  -m ibm-granite/granite-8b-code-instruct-128k -b 150 |
+-----------------------------
+Model: granite-8b-tp1-1024-1024-bf16
+Server Command: PT_HPU_LAZY_MODE=1 ./run.sh -m ibm-granite/granite-3.1-8b-instruct -b 132
+-----------------------------
+Model: mistral-large-tp4-1024-1024-bf16
+Server Command: ./run.sh -m /mnt/weka/data/git_lfs/pytorch/mistral/mistral-large-2407 -t 4 -b 100 --block_size 256 --block_bucket_step 64
+-----------------------------
+Model: llama3.2-90b-tp4-1024-1024-bf16
+Server Command: PT_HPU_LAZY_MODE=1 ./run.sh -m meta-llama/Llama-3.2-90B-Vision-Instruct -t 4 -b 70 --vision --multistep 32
+-----------------------------
+Model: llama3.1-70b-tp4-1024-1024-bf16-tc
+Server Command: PT_HPU_LAZY_MODE=1 ./run.sh -m meta-llama/Meta-Llama-3.1-70B-Instruct -t 4 -b 200
+-----------------------------
+Model: granite-34b-code-instruct_8k-bf16-1x
+Server Command: PT_HPU_LAZY_MODE=1 VLLM_DECODE_BLOCK_BUCKET_STEP=32 VLLM_CONFIG_HIDDEN_LAYERS=20  ./run.sh  -m ibm-granite/granite-34b-code-instruct-8k  -b 130 --block_size 256
+-----------------------------
+Model: mistralai-Mixtral-8x7B-Instruct-v0.1-bf16-1x
+Server Command: PT_HPU_LAZY_MODE=1 ./run.sh -m mistralai/Mixtral-8x7B-Instruct-v0.1 -t 1 -b 110
+-----------------------------
+Model: codellama-34b-tp1-1024-1024-bf16
+Server Command: ./run.sh -m meta-llama/CodeLlama-34b-Instruct-hf -b 108 --block_bucket_step 64 --split_qkv
+-----------------------------
+Model: granite-3b-code-instruct-128k-bf16-1x
+Server Command: ./run.sh -m ibm-granite/granite-3b-code-instruct-128k -b 46 --block_bucket_step 16 --layers_per_graph 32 --split_qkv
+-----------------------------
+Model: granite-20b-code-instruct-128k-bf16-1x
+Server Command: ./run.sh -m ibm-granite/granite-20b-code-instruct-8k -b 86 --block_size 256 --block_bucket_step 64 --layers_per_graph 32 --split_qkv
+-----------------------------
+Model: llama3.1-8b-tp1-1024-1024-bf16
+Server Command: PT_HPU_LAZY_MODE=1  ./run.sh -m meta-llama/Meta-Llama-3.1-8B-Instruct -b 170
+-----------------------------
+Model: granite-8b-code-instruct-128k
+Server Command: VLLM_DECODE_BLOCK_BUCKET_STEP=8 VLLM_CONFIG_HIDDEN_LAYERS=8 VLLM_PROMPT_USE_FUSEDSDPA=true PT_HPU_LAZY_MODE=1 ./run.sh  -m ibm-granite/granite-8b-code-instruct-128k -b 150
+-----------------------------
+Model: llama3.1-405b-tp8-1024-1024-fp8-tc
+Server Command: QUANT_CONFIG=/software/ae/fmwork/inc/1.21.0/llama-3.1-405b-instruct-v2/maxabs_quant_g3.json PT_HPU_LAZY_MODE=1 ./run.sh -m /mnt/weka/data/git_lfs/pytorch/llama3.1/Meta-Llama-3.1-405B-Instruct -t 8 -b 168 --fp8
+-----------------------------
+Model: llama3.3-70b-tp4-1024-1024-fp8
+Server Command: QUANT_CONFIG=/software/ae/fmwork/inc/1.21.0/meta-llama-3.3-70b-instruct/maxabs_quant_g3.json PT_HPU_LAZY_MODE=1 FUSER_ENABLE_LOW_UTILIZATION=1  ./run.sh -m meta-llama/llama-3.3-70b-instruct -t 4 -b 256 --fp8
+-----------------------------
