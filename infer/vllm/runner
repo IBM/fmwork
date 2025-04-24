@@ -7,11 +7,31 @@ while [ -L "$SOURCE" ]; do
     [[ $SOURCE != /* ]] && SOURCE=$SDIR/$SOURCE; done
 SDIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
 
-if [[ ${#} -lt 19 ]]; then
+# MODIFIED: Check for mode as the first required parameter
+if [[ $# -lt 2 || "$1" != "--mode" ]]; then
+    echo "Error: First parameter must be --mode (offline|server)"
+    exit 1
+fi
+
+# MODIFIED: Extract mode parameter and shift to remove it from args
+mode="$2"
+shift 2  # Remove --mode and its value from arguments
+
+# MODIFIED: Validate mode parameter
+if [[ "${mode}" != "offline" && "${mode}" != "server" ]]; then
+    echo "Error: Invalid mode '${mode}'. Must be 'offline' or 'server'"
+    exit 1
+fi
+
+# Now continue with the rest of the parameter processing
+if [[ ${#} -lt 16 ]]; then
     if [[ "${1}" != "-h" && ${1} != "--help" ]]; then
         echo "error: missing arguments"
     fi
 
+    # MODIFIED: Updated help text to include mode
+    echo "Usage: $0 --mode (offline|server) [options]"
+    echo ""
     echo "  rdir:   root output directory"
     echo "  mr:     model root directory"
     echo "  mmtps:  model names and associated tps"
@@ -23,14 +43,16 @@ if [[ ${#} -lt 19 ]]; then
     exit 1
 fi
 
-shift;  rdir=${1}; shift
-shift;    mr=${1}; shift
-shift; mmtps=${1}; shift
-shift;   iis=${1}; shift; iis_mode=${1}; shift
-shift;   oos=${1}; shift; oos_mode=${1}; shift
-shift;   bbs=${1}; shift; bbs_mode=${1}; shift
-shift;  devs=${1}; shift
-shift;  sdir=${1}; shift
+rdir=${1}; shift
+mr=${1}; shift
+mmtps=${1}; shift
+iis=${1}; shift; iis_mode=${1}; shift
+oos=${1}; shift; oos_mode=${1}; shift
+bbs=${1}; shift; bbs_mode=${1}; shift
+devs=${1}; shift
+sdir=${1}; shift
+
+# Now ${@} contains all remaining parameters after processing the required ones
 
 if [[ ${iis_mode} == "split" ]]; then iis_for=${iis//,/ }; else iis_for=iis; fi
 if [[ ${oos_mode} == "split" ]]; then oos_for=${oos//,/ }; else oos_for=oos; fi
@@ -47,9 +69,10 @@ echo
 echo "${bdir}"
 echo
 
+echo -e "\e[1;36mMODE = ${mode}\e[0m"               |& tee -a ${bdir}/params
 echo "rdir = ${rdir}"               |& tee -a ${bdir}/params
 echo "mr   = ${mr}"                 |& tee -a ${bdir}/params
-echo "mms  = ${mms}"                |& tee -a ${bdir}/params
+echo "mmtps  = ${mmtps}"            |& tee -a ${bdir}/params
 echo "iis  = ${iis} ${iis_mode}"    |& tee -a ${bdir}/params
 echo "oos  = ${oos} ${oos_mode}"    |& tee -a ${bdir}/params
 echo "bbs  = ${bbs} ${bbs_mode}"    |& tee -a ${bdir}/params
@@ -137,37 +160,302 @@ if [[ ${iis_mode} == "split" ]]; then iis_driver=${ii}; else iis_driver=${iis}; 
 if [[ ${oos_mode} == "split" ]]; then oos_driver=${oo}; else oos_driver=${oos}; fi
 if [[ ${bbs_mode} == "split" ]]; then bbs_driver=${bb}; else bbs_driver=${bbs}; fi
 
-cmd="
-${SDIR}/driver
-    --id ${btim}/${etim}
-    -m   ${mr}/${mm}
-    -i   ${iis_driver}
-    -o   ${oos_driver}
-    -b   ${bbs_driver}
-    -t   ${tp}
-    ${@}
-"
+# Separate parameter parsing for server mode
+if [[ ${mode} == "server" ]]; then
+    # Default parameters for vllm serve
+    server_port=8010
+    gpu_mem_util="0.95"
+    max_model_len=$((iis_driver + oos_driver))
+    swap_space="16"
+    scheduler_steps="8"
+    client_script_path="${SDIR}"  # Default path
+    
+    # Parse command line parameters 
+    # Extract server-specific parameters first
+    for ((i=1; i<=$#; i+=2)); do
+        case "${!i}" in
+            --port)
+                server_port="${@:$i+1:1}"
+                ;;
+            --gpu-memory-utilization)
+                gpu_mem_util="${@:$i+1:1}"
+                ;;
+            --s)
+                scheduler_steps="${@:$i+1:1}"
+                ;;
+            --swap-space)
+                swap_space="${@:$i+1:1}"
+                ;;
+            --cdir)
+                client_script_path="${@:$i+1:1}"
+                ;;
+        esac
+    done
 
+    # MODIFIED: Extract parameters that may have comma-separated values
+    # Initialize with empty values
+    rr=""
+    burstiness=""
+    num_prompts=""
+    dataset_name=""
+    dataset_path=""
+    
+    for ((i=1; i<=$#; i+=2)); do
+        case "${!i}" in
+            --request-rate)
+                rr="${@:$i+1:1}"
+                ;;
+            --burstiness)
+                burstiness="${@:$i+1:1}"
+                ;;
+            --num-prompts)
+                num_prompts="${@:$i+1:1}"
+                ;;
+            --dataset-name)
+                dataset_name="${@:$i+1:1}"
+                ;;
+            --dataset-path)
+                dataset_path="${@:$i+1:1}"
+                ;;
+        esac
+    done
+
+    # Check required parameters for benchmark_serving.py
+    missing_params=()
+    [[ -z "$rr" ]] && missing_params+=("--request-rate")
+    [[ -z "$burstiness" ]] && missing_params+=("--burstiness")
+    [[ -z "$num_prompts" ]] && missing_params+=("--num-prompts")
+    [[ -z "$dataset_name" ]] && missing_params+=("--dataset-name")
+    
+    # Check dataset_path based on dataset type
+    if [[ "$dataset_name" != "random" && -z "$dataset_path" ]]; then
+        missing_params+=("--dataset-path (required for $dataset_name dataset)")
+    fi
+    
+    if [[ ${#missing_params[@]} -gt 0 ]]; then
+        echo "Error: Missing required parameters for benchmark_serving.py:"
+        printf " %s\n" "${missing_params[@]}"
+        exit 1
+    fi
+
+    # Server command
+    server_cmd="vllm serve ${mr}/${mm} --tensor-parallel-size ${tp} --num-scheduler-steps ${scheduler_steps} --max-model-len ${max_model_len} --swap-space ${swap_space} --disable-log-requests --port ${server_port} --gpu-memory-utilization ${gpu_mem_util}"
+
+    # MODIFIED: Generate all combinations from comma-separated parameters
+    # Convert comma-separated values to arrays
+    IFS=',' read -ra rr_array <<< "$rr"
+    IFS=',' read -ra burstiness_array <<< "$burstiness" 
+    IFS=',' read -ra num_prompts_array <<< "$num_prompts"
+    IFS=',' read -ra dataset_name_array <<< "$dataset_name"
+    IFS=',' read -ra dataset_path_array <<< "$dataset_path"
+    
+    # Validate dataset names and paths have matching counts
+    if [[ ${#dataset_name_array[@]} != ${#dataset_path_array[@]} ]]; then
+        echo "Error: Number of dataset names (${#dataset_name_array[@]}) does not match number of dataset paths (${#dataset_path_array[@]})"
+        echo "Please provide matching numbers of comma-separated values for --dataset-name and --dataset-path"
+        exit 1
+    fi
+    
+    # Create an array to store all benchmark configurations
+    benchmark_configs=()
+    
+    # Generate all combinations
+    for ((ds_idx=0; ds_idx<${#dataset_name_array[@]}; ds_idx++)); do
+        ds_name="${dataset_name_array[$ds_idx]}"
+        ds_path="${dataset_path_array[$ds_idx]}"
+        
+        # Configure dataset-specific parameters based on dataset type
+        case "${ds_name}" in
+            "sonnet")
+                dataset_params="--sonnet-input-len ${ii} --sonnet-output-len ${oo}"
+                ;;
+            "hf")
+                dataset_params="--hf-output-len ${oo}"
+                ;;
+            "sharegpt")
+                dataset_params="--sharegpt-output-len ${oo}"
+                ;;
+            "random")
+                dataset_params="--random-input-len ${ii} --random-output-len ${oo}"
+                ;;
+            *)
+                echo "Warning: Unknown dataset type '${ds_name}'"
+                dataset_params=""
+                ;;
+        esac
+        
+        # For each combination of request rate, burstiness, and num_prompts
+        for r in "${rr_array[@]}"; do
+            for b in "${burstiness_array[@]}"; do
+                for n in "${num_prompts_array[@]}"; do
+                    # Generate client command for this combination
+                    client_cmd="python ${client_script_path}/benchmark_serving.py --backend vllm --tokenizer ${mr}/${mm} --model ${mr}/${mm} --request-rate ${r} --burstiness ${b} --max-concurrency ${bb} --num-prompts ${n} --dataset-name ${ds_name} --dataset-path ${ds_path} ${dataset_params} --port ${server_port}"
+                    
+                    # Add this command to our configurations array
+                    benchmark_configs+=("${client_cmd}")
+                    
+                    # Store parameters for directory creation
+                    config_ds_names+=("${ds_name}")
+                    config_rrs+=("${r}")
+                    config_bursts+=("${b}")
+                    config_nps+=("${n}")
+                done
+            done
+        done
+    done
+    
+    # Print the number of configurations generated
+    echo "Generated ${#benchmark_configs[@]} benchmark configurations" |& tee -a ${edir}/benchmark_configs.log
+    for ((i=0; i<${#benchmark_configs[@]}; i++)); do
+        echo "Config $((i+1)): dataset/${config_ds_names[$i]}/rr/${config_rrs[$i]}/burst/${config_bursts[$i]}/np/${config_nps[$i]}" |& tee -a ${edir}/benchmark_configs.log
+        echo "Command: ${benchmark_configs[$i]}" |& tee -a ${edir}/benchmark_configs.log
+        echo "" |& tee -a ${edir}/benchmark_configs.log
+    done
+    
+elif [[ ${mode} == "offline" ]]; then
+    cmd="
+    ${SDIR}/driver
+        --id ${btim}/${etim}
+        -m   ${mr}/${mm}
+        -i   ${iis_driver}
+        -o   ${oos_driver}
+        -b   ${bbs_driver}
+        -t   ${tp}
+        ${@}
+    "
+fi
+
+# Modify run function to support different modes
 function run {
     export PYTHONUNBUFFERED=1
     export CUDA_DEVICE_ORDER=PCI_BUS_ID
     export CUDA_VISIBLE_DEVICES=${devset}
     env         &> ${edir}/utils/env
     pip list    &> ${edir}/utils/pip-list
-    echo ${cmd}  > ${edir}/exp.cmd
-    eval ${cmd} &> ${edir}/exp.log
-    sleep 5
-    out=$(ps auxww | grep -v grep | grep driver | grep ${btim}/${etim})
-    if [[ ${?} -eq 0 ]]; then
-        echo "${out}" | tr -s ' ' | cut -d ' ' -f 2 | xargs kill -2
+    
+    if [[ ${mode} == "offline" ]]; then
+        # Original offline mode logic
+        echo ${cmd}  > ${edir}/exp.cmd
+        eval ${cmd} &> ${edir}/exp.log
         sleep 5
-    fi
-    sleep 30
-    unlock ${devset}
+        out=$(ps auxww | grep -v grep | grep driver | grep ${btim}/${etim})
+        if [[ ${?} -eq 0 ]]; then
+            echo "${out}" | tr -s ' ' | cut -d ' ' -f 2 | xargs kill -2
+            sleep 5
+        fi
+        sleep 30
+        unlock ${devset}
+        echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mDONE\e[0m \e[93m${edir}\e[0m"
+    elif [[ ${mode} == "server" ]]; then
+        # Server mode logic
+        echo ${server_cmd} > ${edir}/server.cmd
+        
+        # Start the server
+        echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mSTARTING SERVER\e[0m \e[93m${edir}\e[0m"
+        bash -c "${server_cmd}" > ${edir}/server.log 2>&1 &
+        server_pid=$!
+        echo ${server_pid} > ${edir}/server.pid
+        
+        # Check if server is ready
+        echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mWAITING FOR SERVER READY\e[0m \e[93m${edir}\e[0m"
+        attempt=1
+        server_ready=false
+        
+        while true; do
+            # Check if server process is still running
+            if ! ps -p ${server_pid} > /dev/null; then
+                echo -e "\e[95m$(printf "%-15s" ${devset}) \e[101mSERVER CRASHED\e[0m \e[93m${edir}\e[0m"
+                # Capture error logs
+                tail -n 50 ${edir}/server.log > ${edir}/server_crash.log
+                break
+            fi
+            
+            # Check if log contains the ready message
+            if grep -q "Application startup complete" ${edir}/server.log; then
+                echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mSERVER READY\e[0m \e[93m${edir}\e[0m"
+                server_ready=true
+                # Wait an additional 5 seconds to ensure full readiness
+                sleep 5
+                break
+            fi
+            
+            echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mWAITING FOR SERVER (Attempt: ${attempt})\e[0m \e[93m${edir}\e[0m"
+            sleep 10
+            ((attempt++))
+        done
 
-    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mDONE\e[0m \e[93m${edir}\e[0m"
+        # MODIFIED: Run multiple benchmark configurations if server is ready
+        if ps -p ${server_pid} > /dev/null && [ "$server_ready" = true ]; then
+            echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mSERVER STARTED\e[0m \e[93m${edir}\e[0m"
+            
+            # Display the number of configurations to run
+            config_count=${#benchmark_configs[@]}
+            echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mRUNNING ${config_count} BENCHMARK CONFIGURATIONS\e[0m \e[93m${edir}\e[0m"
+            
+            # MODIFIED: Display hierarchical directory structure
+            echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mSTORING RESULTS IN HIERARCHICAL DIRECTORY STRUCTURE\e[0m \e[93m${edir}/dataset/[name]/rr/[rate]/burst/[value]/np/[prompts]\e[0m"
+            
+            # Run each configuration sequentially
+            for ((config_idx=0; config_idx<config_count; config_idx++)); do
+                # MODIFIED: Create hierarchical directory structure
+                ds_name="${config_ds_names[$config_idx]}"
+                r="${config_rrs[$config_idx]}"
+                b="${config_bursts[$config_idx]}"
+                n="${config_nps[$config_idx]}"
+                
+                # Create nested directory structure
+                config_dir="${edir}/dataset/${ds_name}/rr/${r}/burst/${b}/np/${n}"
+                mkdir -p "${config_dir}"
+                
+                # Get the command for this configuration
+                client_cmd="${benchmark_configs[$config_idx]} --save-result --result-dir ${config_dir}"
+                
+                echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mRUNNING CLIENT CONFIG $((config_idx+1))/${config_count}\e[0m \e[93m${config_dir}\e[0m"
+                echo "${client_cmd}" > "${config_dir}/client.cmd"
+                
+                # Run client and wait for completion
+                eval ${client_cmd} > "${config_dir}/client.log" 2>&1
+                client_status=$?
+                
+                # Record the exit status
+                echo "${client_status}" > "${config_dir}/exit_status"
+                
+                if [[ ${client_status} -eq 0 ]]; then
+                    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mCLIENT $((config_idx+1)) COMPLETED SUCCESSFULLY\e[0m \e[93m${config_dir}\e[0m"
+                else
+                    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[101mCLIENT $((config_idx+1)) FAILED (STATUS: ${client_status})\e[0m \e[93m${config_dir}\e[0m"
+                fi
+            done
+            
+            # All clients completed, stop the server
+            echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mALL BENCHMARKS COMPLETED. STOPPING SERVER\e[0m \e[93m${edir}\e[0m"
+            kill -15 ${server_pid}
+            sleep 10
+            
+            # Check if server was cleanly shut down
+            if ps -p ${server_pid} > /dev/null; then
+                echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mFORCE STOPPING SERVER\e[0m \e[93m${edir}\e[0m"
+                kill -9 ${server_pid}
+            fi
+        else
+            echo -e "\e[95m$(printf "%-15s" ${devset}) \e[101mSERVER FAILED TO START\e[0m \e[93m${edir}\e[0m"
+            # Try to clean up server process (if still running)
+            if ps -p ${server_pid} > /dev/null; then
+                kill -9 ${server_pid}
+            fi
+        fi
+
+        unlock ${devset}
+        echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mSERVER TEST COMPLETED\e[0m \e[93m${edir}\e[0m"
+    fi
 }
-    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mRUN \e[0m \e[93m${edir}\e[0m"
+
+# Update output information
+if [[ ${mode} == "offline" ]]; then
+    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mRUN OFFLINE\e[0m \e[93m${edir}\e[0m"
+else
+    echo -e "\e[95m$(printf "%-15s" ${devset}) \e[100mRUN SERVER\e[0m \e[93m${edir}\e[0m"
+fi
 
 run & # &> ${edir}/exp.log &
 
