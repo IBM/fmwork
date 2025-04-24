@@ -107,9 +107,9 @@ def modify_subdir(subdir, fmwork_gen_line):
     server_name = subdir_parts[1]
     gpu_type = servers.get(server_name, 'Unknown')
 
-    fmwork_gen_4th_part = fmwork_gen_parts[4] if len(fmwork_gen_parts) > 2 else ''
+    hwc = fmwork_gen_parts[4] if len(fmwork_gen_parts) > 2 else ''
 
-    modified_subdir = f"{nQyear},{','.join(subdir_parts)},{gpu_type},{fmwork_gen_4th_part}"
+    modified_subdir = f"{nQyear},{','.join(subdir_parts)},{gpu_type},{hwc}"
 
     return modified_subdir, modified_fmwork_gen_line
 
