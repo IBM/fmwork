@@ -25,6 +25,7 @@ RUN if [ "$BUILD_HIPBLASLT" = "1" ]; then \
 
 # -----------------------
 # vllm
+COPY ./vllm_mllama_hip_graph.path /app/
 ARG BUILD_VLLM="1"
 ARG VLLM_BRANCH="aiter_integration_final"
 ARG VLLM_REPO="https://github.com/ROCm/vllm.git"
@@ -34,6 +35,8 @@ RUN if [ "$BUILD_VLLM" = "1" ]; then \
     && rm -rf vllm \
     && git clone --recursive -b ${VLLM_BRANCH} ${VLLM_REPO} \
 	  && cd vllm \
+    && mv /app/vllm_mllama_hip_graph.path ./  \ 
+    && git apply vllm_mllama_hip_graph.path \ 
     && pip install -r requirements/rocm.txt \ 
     && python3 setup.py install; \
     fi
