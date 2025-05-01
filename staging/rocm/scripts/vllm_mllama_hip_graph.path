@@ -1,0 +1,50 @@
+diff --git a/vllm/attention/backends/utils.py b/vllm/attention/backends/utils.py
+index efee108e2..5365dc3f2 100644
+--- a/vllm/attention/backends/utils.py
++++ b/vllm/attention/backends/utils.py
+@@ -354,7 +354,7 @@ class CommonAttentionState(AttentionState):
+             # The encoder decoder model works only with XFormers and
+             # Flash Attention backend. Assert the same.
+             assert self.runner.attn_backend.get_name() in\
+-                ["XFORMERS", "FLASH_ATTN"], \
++                ["XFORMERS", "FLASH_ATTN", "ROCM_FLASH"], \
+                 f"Expected attn_backend name to be either 'XFORMERS' or " \
+                 f"'FLASH_ATTN', but "\
+                 f"got '{self.runner.attn_backend.get_name()}'"
+@@ -376,7 +376,7 @@ class CommonAttentionState(AttentionState):
+             # The encoder decoder model works only with XFormers and
+             # Flash Attention backend. Assert the same.
+             assert self.runner.attn_backend.get_name() in\
+-                ["XFORMERS", "FLASH_ATTN"], \
++                ["XFORMERS", "FLASH_ATTN", "ROCM_FLASH"], \
+                 f"Expected attn_backend name to be either 'XFORMERS' or "\
+                 f"'FLASH_ATTN', but "\
+                 f"got '{self.runner.attn_backend.get_name()}'"
+@@ -397,7 +397,7 @@ class CommonAttentionState(AttentionState):
+             # The encoder decoder model works only with XFormers and
+             # Flash Attention backend. Assert the same.
+             assert self.runner.attn_backend.get_name() in\
+-                ["XFORMERS", "FLASH_ATTN"], \
++                ["XFORMERS", "FLASH_ATTN", "ROCM_FLASH"], \
+                 f"Expected attn_backend name to be either 'XFORMERS' or "\
+                 f"'FLASH_ATTN', but "\
+                 f"got '{self.runner.attn_backend.get_name()}'"
+diff --git a/vllm/config.py b/vllm/config.py
+index e9093ca28..c00d7a3bb 100644
+--- a/vllm/config.py
++++ b/vllm/config.py
+@@ -667,14 +667,6 @@ class ModelConfig:
+         self.max_seq_len_to_capture = min(self.max_seq_len_to_capture,
+                                           self.max_model_len)
+ 
+-        MODEL_NOT_SUPPORT_CUDA_GRAPH = ['mllama']
+-        if (self.hf_config.model_type in MODEL_NOT_SUPPORT_CUDA_GRAPH
+-                and not self.enforce_eager):
+-            logger.warning(
+-                "CUDA graph is not supported for %s yet, fallback to the eager "
+-                "mode.", self.hf_config.model_type)
+-            self.enforce_eager = True
+-
+     def _verify_bnb_config(self) -> None:
+         """
+         The current version of bitsandbytes (0.44.0) with 8-bit models does not
