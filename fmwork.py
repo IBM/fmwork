@@ -203,7 +203,7 @@ def show(
     tensor_parallel):
 
     _ign = 0.2
-    _ign = int(max(_ign * len(var.dts), 1))
+    _ign = int(max(_ign * len(var.dts), 1)) if len(var.dts) > 1 else 0
     _rem = var.dts[_ign:]
     _med = med(_rem)
     _itl = 1000.0 * _med / output_size
