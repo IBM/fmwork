@@ -1,0 +1,155 @@
+#!/usr/bin/env -S python -u
+
+"""
+Taken from https://github.com/IBM/fmwork/tree/main @665d802c2e1e9a756e27f0c40eba9559d551d245
+
+Changes:
+    - add arguments --device, --block_size, --weights_load_device, --num_scheduler_steps and --max_prompt_batch_size
+    - setup HPU related vLLM settings
+
+"""
+
+import argparse
+import fmwork
+import os
+import torch
+import traceback
+import vllm
+
+
+class var: pass
+class par: pass
+
+
+def main():
+
+    params()
+    llm()
+    runs()
+    done()
+    os._exit(0)
+
+def params():
+
+    fmwork.banner('PARAMS')
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('-m', '--model_path',
+        type=str, required=True)
+    parser.add_argument('-i', '--input_size',
+        type=str, required=True)
+    parser.add_argument('-o', '--output_size',
+        type=str, required=True)
+    parser.add_argument('-b', '--batch_size',
+        type=str, required=True)
+    parser.add_argument('-t', '--tensor_parallel',
+        type=int, required=True)
+    parser.add_argument('-r', '--reps',
+        type=int, default=3)
+    parser.add_argument('-d', '--dtype',
+        type=str, default='auto')
+    parser.add_argument('-q', '--quantization',
+        type=str, default=None)
+    parser.add_argument('-k', '--kv_cache_dtype',
+        type=str, default='auto')
+    parser.add_argument('-u', '--gpu_memory_utilization',
+        type=float, default=0.95)
+    parser.add_argument('-e', '--enforce_eager',
+        action='store_true')
+    parser.add_argument('--device', type=str, default="cuda")
+    parser.add_argument('--block_size', type=int, default=128)
+    parser.add_argument('--max_num_batched_tokens', type=int, default=1024)
+    parser.add_argument('--weights_load_device', type=str, default=None)
+    parser.add_argument("--num_scheduler_steps", type=int, default=1)
+    parser.parse_args(namespace=par)
+
+    attrs = []
+    for attr in dir(par):
+        if not attr.startswith('__') and not attr.endswith('__'):
+            attrs.append(attr)
+    pad = max([len(x) for x in attrs])
+    for attr in sorted(attrs):
+        print('%-*s = %s' % (
+            pad, attr, getattr(par, attr)))
+
+    var.input_sizes  = list(map(int, par.input_size.split(',')))
+    var.output_sizes = list(map(int, par.output_size.split(',')))
+    var.batch_sizes  = list(map(int, par.batch_size.split(',')))
+
+def llm():
+
+    fmwork.banner('LLM')
+
+    var.llm = vllm.LLM(
+        dtype                  = par.dtype,
+        enforce_eager          = par.enforce_eager,
+        gpu_memory_utilization = par.gpu_memory_utilization,
+        kv_cache_dtype         = par.kv_cache_dtype,
+        max_model_len          = max(var.input_sizes) + max(var.output_sizes),
+        max_num_batched_tokens = par.max_num_batched_tokens,
+        model                  = par.model_path,
+        quantization           = par.quantization,
+        tensor_parallel_size   = par.tensor_parallel,
+        trust_remote_code      = True,
+        device                 = par.device,
+        block_size             = par.block_size,
+        max_num_seqs           = max(var.batch_sizes),
+        weights_load_device    = par.weights_load_device,
+        num_scheduler_steps    = par.num_scheduler_steps,
+    )
+
+def runs():
+
+    for batch_size in var.batch_sizes:
+        for input_size in var.input_sizes:
+            for output_size in var.output_sizes:
+                run(input_size, output_size, batch_size)
+
+def run(input_size, output_size, batch_size):
+
+    fmwork.banner(
+        'RUN',
+        input_size,  '/',
+        output_size, '/',
+        batch_size,  '/',
+        par.tensor_parallel
+    )
+
+    input_batch = fmwork.input_generator(
+        par.model_path,
+        input_size, batch_size,
+        return_tensors='np',
+    )
+
+    sampling_params = vllm.SamplingParams(
+        max_tokens = output_size,
+        ignore_eos = True,
+    )
+
+    kwargs = {
+        'prompt_token_ids' : input_batch,
+        'sampling_params'  : sampling_params,
+        'use_tqdm'         : False,
+    }
+
+    fmwork.reset()
+
+    for rep in range(par.reps):
+        fmwork.t0()
+        var.llm.generate(**kwargs)
+        if par.device == "hpu":
+            torch.hpu.synchronize()
+        else:
+            torch.cuda.synchronize()
+        fmwork.t1(
+            rep, par.reps,
+            input_size, output_size, batch_size,
+            par.tensor_parallel)
+
+def done():
+
+    fmwork.banner('DONE')
+
+if __name__ == '__main__': main()
+
