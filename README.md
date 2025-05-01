@@ -1,6 +1,9 @@
 # fmwork
 
-FM Benchmarking Framework
+⚠️ 
+Code is currently being restructured. 
+Release [v0.1.0](https://github.com/IBM/fmwork/releases/tag/v0.1.0) has a basic version of it to support our ongoing (internal) sweeps.
+Version 1.0.0 (soon) should encompass this new structure, that should better support different hardware and software options.
 
 ## Quick start
 
