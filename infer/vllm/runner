@@ -51,7 +51,7 @@ extraparams=${@}
 paramsjson=$(jq -n \
     --arg rdir "$rdir" \
     --arg mr "$mr" \
-    --arg mms "$mms" \
+    --arg mmtps "$mmtps" \
     --arg iis "$iis" \
     --arg oos "$oos" \
     --arg bbs "$bbs" \
@@ -61,7 +61,7 @@ paramsjson=$(jq -n \
     '{
         rdir: $rdir,
         mr: $mr,
-        mms: $mms,
+        mmtps: $mmtps,
         iis: $iis,
         oos: $oos,
         bbs: $bbs,
