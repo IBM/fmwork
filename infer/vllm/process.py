@@ -53,7 +53,9 @@ def find_vllmversion(subdir, rdir):
         if vllm_line:
             vllm_parts = vllm_line.group(1).split()
             vllm_version=f"{'vllm=='}{vllm_parts[0]}"
-
+        else:
+            vllm_version="unknown"
+   
     return vllm_version
 
 def find_modelandprec(subdir, rdir):
