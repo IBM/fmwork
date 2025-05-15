@@ -18,21 +18,14 @@ def process_csv(file_path):
     except Exception as e:
         print(f"Failed to load CSV file: {e}")
         return None
-
-def main(lh_table, csv_file):
-
-    df = process_csv(csv_file)
-    if df is not None:
-        print(f"CSV file at {csv_file} loaded successfully.")
-
-    lh = LakehouseIceberg()
-
+    
+def append_to_table(lh, lh_table, df):
     if table_exists(lh,lh_table):
-        print("Table exists... appending to existing table")
+        print("Table exists... appending to existing", lh_table, "table")
         table = Table(lh=lh, namespace='fm_work', table_name=lh_table)
         table.append_dataframe(df=df)
     else:
-        print("This table does not exist in the fm_work namespace in lakehouse... creating table")
+        print("This table does not exist in the fm_work namespace in lakehouse... creating", lh_table, "table")
         table_details = TableDetails(
             namespace = 'fm_work',
             name = lh_table,
@@ -53,8 +46,22 @@ def main(lh_table, csv_file):
             table_details = table_details,
         )
         table = Table(lh=lh, namespace='fm_work', table_name=lh_table)
+
+def main(lh_table, csv_file):
+
+    df = process_csv(csv_file)
+    if df is not None:
+        print(f"CSV file at {csv_file} loaded successfully.")
+
+    lh = LakehouseIceberg()
+    backend_table = lh_table.split('_')[0]
+    hw_table = lh_table.split('_')[1]
+    append_to_table(lh, lh_table, df)
+    append_to_table(lh, backend_table, df)
+    append_to_table(lh, hw_table, df)
+
+    print("Done. All CSV data inserted into the following Lakehouse tables:",lh_table,backend_table,hw_table)
     
-    print(table.to_pandas())
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -62,6 +69,20 @@ if __name__ == "__main__":
         sys.exit(1)
     
     lh_table = sys.argv[1]
+
+    valid_tablenames = [
+        "vllm_cuda",
+        "vllm_gaudi",
+        "vllm_rocm",
+        "vllm_spyre",
+        "trtllm_cuda",
+        "transformers_cuda"
+    ]
+
+    if lh_table not in valid_tablenames:
+        print(f"Error: table name must be one of {valid_tablenames}")
+        sys.exit(1)
+
     csv_file = sys.argv[2]
     main(lh_table, csv_file)
 
