@@ -20,33 +20,41 @@ def process_csv(file_path):
         return None
     
 def append_to_table(lh, lh_table, df):
+    
     if table_exists(lh,lh_table):
-        print("Table exists... appending to existing", lh_table, "table")
         table = Table(lh=lh, namespace='fm_work', table_name=lh_table)
-        table.append_dataframe(df=df)
+        existing_df = table.to_pandas()
+        combined_df = pd.concat([existing_df, df], ignore_index=True)
+        unique_df = combined_df.drop_duplicates(subset='etim', keep='first')
+        if unique_df.equals(existing_df):
+            print(lh_table, "table exists... no new data entries to append")
+        else:
+            print(lh_table, "table exists... appending new data to existing table")
+        table.delete()
     else:
         print("This table does not exist in the fm_work namespace in lakehouse... creating", lh_table, "table")
-        table_details = TableDetails(
-            namespace = 'fm_work',
-            name = lh_table,
-            identifier_fields=['etim'],
-            mandatory_fields = ['work','user','host',
-                                'btim','etim','hw',
-                                'hwc','back','mm',
-                                'prec','dp','ii',
-                                'oo','bb','tp',
-                                'med','ttft','gen',
-                                'itl','thp'],
-            is_public = True,
-        )
+        unique_df=df
+    
+    table_details = TableDetails(
+        namespace = 'fm_work',
+        name = lh_table,
+        identifier_fields=['etim'],
+        mandatory_fields = ['work','user','host',
+                            'btim','etim','hw',
+                            'hwc','back','mm',
+                            'prec','dp','ii',
+                            'oo','bb','tp',
+                            'med','ttft','gen',
+                            'itl','thp'],
+        is_public = True,
+    )
 
-        Table.from_dataframe(
-            lh = lh,
-            df = df,
-            table_details = table_details,
-        )
-        table = Table(lh=lh, namespace='fm_work', table_name=lh_table)
-
+    Table.from_dataframe(
+        lh = lh,
+        df = unique_df,
+        table_details = table_details,
+    )
+    
 def main(lh_table, csv_file):
 
     df = process_csv(csv_file)
