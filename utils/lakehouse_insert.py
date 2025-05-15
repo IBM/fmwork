@@ -25,35 +25,34 @@ def append_to_table(lh, lh_table, df):
         table = Table(lh=lh, namespace='fm_work', table_name=lh_table)
         existing_df = table.to_pandas()
         combined_df = pd.concat([existing_df, df], ignore_index=True)
-        unique_df = combined_df.drop_duplicates(subset='etim', keep='first')
-        if unique_df.equals(existing_df):
+        unique_df = combined_df.drop_duplicates(subset='etim', keep=False)
+        if unique_df.empty:
             print(lh_table, "table exists... no new data entries to append")
         else:
             print(lh_table, "table exists... appending new data to existing table")
-        table.delete()
+            unique_df = unique_df.fillna('')
+            table.append_dataframe(unique_df)
     else:
         print("This table does not exist in the fm_work namespace in lakehouse... creating", lh_table, "table")
-        unique_df=df
-    
-    table_details = TableDetails(
-        namespace = 'fm_work',
-        name = lh_table,
-        identifier_fields=['etim'],
-        mandatory_fields = ['work','user','host',
-                            'btim','etim','hw',
-                            'hwc','back','mm',
-                            'prec','dp','ii',
-                            'oo','bb','tp',
-                            'med','ttft','gen',
-                            'itl','thp'],
-        is_public = True,
-    )
+        table_details = TableDetails(
+            namespace = 'fm_work',
+            name = lh_table,
+            identifier_fields=['etim'],
+            mandatory_fields = ['work','user','host',
+                                'btim','etim','hw',
+                                'hwc','back','mm',
+                                'prec','dp','ii',
+                                'oo','bb','tp',
+                                'med','ttft','gen',
+                                'itl','thp'],
+            is_public = True,
+        )
 
-    Table.from_dataframe(
-        lh = lh,
-        df = unique_df,
-        table_details = table_details,
-    )
+        Table.from_dataframe(
+            lh = lh,
+            df = df,
+            table_details = table_details,
+        )
     
 def main(lh_table, csv_file):
 
@@ -93,4 +92,3 @@ if __name__ == "__main__":
 
     csv_file = sys.argv[2]
     main(lh_table, csv_file)
-
