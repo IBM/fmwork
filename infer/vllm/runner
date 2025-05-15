@@ -47,7 +47,7 @@ echo
 echo "${bdir}"
 echo
 
-extraparams=("${@:1}")
+extraparams=${@}
 paramsjson=$(jq -n \
     --arg rdir "$rdir" \
     --arg mr "$mr" \
@@ -57,7 +57,7 @@ paramsjson=$(jq -n \
     --arg bbs "$bbs" \
     --arg devs "$devs" \
     --arg sdir "$sdir" \
-    --argjson extraparams "$(printf '%s\n' "${extra_params[@]}" | jq -R . | jq -s .)" \
+    --argjson extraparams "$(printf '%s\n' "${extraparams}" | jq -R . | jq -s .)" \
     '{
         rdir: $rdir,
         mr: $mr,
@@ -67,7 +67,7 @@ paramsjson=$(jq -n \
         bbs: $bbs,
         devs: $devs,
         sdir: $sdir,
-        "@": $extraparams
+        extraparams: $extraparams
     }')
 
 echo "$paramsjson" | jq '.' > ${bdir}/params.json
