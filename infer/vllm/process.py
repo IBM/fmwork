@@ -76,20 +76,14 @@ def find_modelandprec(subdir, rdir):
     return model,precision
 
 def parse_extraparams(subdir, rdir):
-    # Join the root directory and subdirectory
     leaf_dir = os.path.join(rdir, subdir.replace(',', os.sep))
-    
-    # Look one level above the joined path for params.json
     parent_dir = os.path.dirname(leaf_dir)
     params_path = os.path.join(parent_dir, 'params.json')
     
-    # Read the params.json file
     with open(params_path, 'r') as file:
         params = json.load(file)
     
-    # Get the value for the key 'extraparams'
     extraparams = params['extraparams'][0]
-
     env_path = os.path.join(leaf_dir, 'utils', 'env')
     
     vllm_vars = []
@@ -98,7 +92,6 @@ def parse_extraparams(subdir, rdir):
             if line.startswith('VLLM'):
                 vllm_vars.append(line.strip())
     
-    # Join VLLM variables into a single string
     vllm_vars_str = ' '.join(vllm_vars)
 
     return extraparams,vllm_vars_str
