@@ -137,7 +137,7 @@ def modify_subdir(subdir, fmwork_gen_line):
 
     return modified_subdir, modified_fmwork_gen_line
 
-def write_to_csv(subdirs, rdir, output_file='fmworkdata.csv'):
+def write_to_csv(subdirs, rdir, output_file):
     data_parallelism=1
     with open(output_file, mode='w', newline='') as file:
         writer = csv.writer(file)
@@ -154,11 +154,12 @@ def write_to_csv(subdirs, rdir, output_file='fmworkdata.csv'):
                 writer.writerow(combined_list)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python process.py <rdir_path>")
+    if len(sys.argv) != 3:
+        print("Usage: python process.py <rdir_path> <output_csv_filename>")
         sys.exit(1)
 
     rdir = sys.argv[1]
+    outputcsv = sys.argv[2]
     subdirs = traverse_directory(rdir)
-    write_to_csv(subdirs, rdir)
-    print(f"FMWORK GEN data in all subdirectories have been written to fmworkdata.csv")
+    write_to_csv(subdirs, rdir, outputcsv)
+    print(f"FMWORK GEN data in all subdirectories have been written to", outputcsv)
