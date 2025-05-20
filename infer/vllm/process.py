@@ -155,7 +155,7 @@ def write_to_csv(subdirs, rdir, output_file):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: python process.py <rdir_path> <output_csv_filename>")
+        print("Usage: python process.py <rdir_path> <output_csv_path>")
         sys.exit(1)
 
     rdir = sys.argv[1]
