@@ -102,28 +102,31 @@ python process.py ~/md0/fmwork-runs ~/md0/fmwork-results/fmwork_data.csv
 ```
 `process.py` will parse all of the fmwork results in the `rdir` directory and write the data to the CSV file with the following header: `work,user,host,btim,etim,hw,hwc,back,mm,prec,dp,ii,oo,bb,tp,med,ttft,gen,itl,thp,extraparams,vllmvars`
 
-- **work** – quarter, year
-- **user** – username
-- **host** – hostname
-- **btim** – batch (sweep) timestamp
-- **etim** – experiment timestamp
-- **hw** – hardware used (GPU model)
-- **hwc** – hardware count (number of GPUs used)
-- **back** – backend inference engine (VLLM version)
-- **mm** – model
-- **prec** – floating point precision
-- **dp** – data parallelism (usually 1)
-- **ii** – input size
-- **oo** – output size
-- **bb** – batch size
-- **tp** – tensor parallel size
-- **med** – inference time in seconds
-- **ttft** – time to first token
-- **gen** – generation time
-- **itl** – inter-token latency
-- **thp** – throughput
-- **extraparams** – extra VLLM parameters
-- **vllmvars** – VLLM environment variables
+| **Field**      | **Description**                                 |
+|----------------|-------------------------------------------------|
+| **work**       | quarter, year                                   |
+| **user**       | username                                        |
+| **host**       | hostname                                        |
+| **btim**       | batch (sweep) timestamp                         |
+| **etim**       | experiment timestamp                            |
+| **hw**         | hardware used (GPU model)                       |
+| **hwc**        | hardware count (number of GPUs used)            |
+| **back**       | backend inference engine (VLLM version)         |
+| **mm**         | model                                           |
+| **prec**       | floating point precision                        |
+| **dp**         | data parallelism (usually 1)                    |
+| **ii**         | input size                                      |
+| **oo**         | output size                                     |
+| **bb**         | batch size                                      |
+| **tp**         | tensor parallel size                            |
+| **med**        | inference time in seconds                       |
+| **ttft**       | time to first token                             |
+| **gen**        | generation time                                 |
+| **itl**        | inter-token latency                             |
+| **thp**        | throughput                                      |
+| **extraparams**| extra VLLM parameters                           |
+| **vllmvars**   | VLLM environment variables                      |
+
 
 
 
