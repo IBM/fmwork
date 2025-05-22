@@ -2,6 +2,7 @@ import os
 import csv
 import sys
 import re
+import json
 from datetime import datetime
 
 servers = {
@@ -52,7 +53,9 @@ def find_vllmversion(subdir, rdir):
         if vllm_line:
             vllm_parts = vllm_line.group(1).split()
             vllm_version=f"{'vllm=='}{vllm_parts[0]}"
-
+        else:
+            vllm_version="unknown"
+   
     return vllm_version
 
 def find_modelandprec(subdir, rdir):
@@ -73,6 +76,27 @@ def find_modelandprec(subdir, rdir):
             model = model_parts[-1]
 
     return model,precision
+
+def parse_extraparams(subdir, rdir):
+    leaf_dir = os.path.join(rdir, subdir.replace(',', os.sep))
+    parent_dir = os.path.dirname(leaf_dir)
+    params_path = os.path.join(parent_dir, 'params.json')
+    
+    with open(params_path, 'r') as file:
+        params = json.load(file)
+    
+    extraparams = params['extraparams'][0]
+    env_path = os.path.join(leaf_dir, 'utils', 'env')
+    
+    vllm_vars = []
+    with open(env_path, 'r') as file:
+        for line in file:
+            if line.startswith('VLLM'):
+                vllm_vars.append(line.strip())
+    
+    vllm_vars_str = ' '.join(vllm_vars)
+
+    return extraparams,vllm_vars_str
 
 
 def modify_subdir(subdir, fmwork_gen_line):
@@ -113,27 +137,29 @@ def modify_subdir(subdir, fmwork_gen_line):
 
     return modified_subdir, modified_fmwork_gen_line
 
-def write_to_csv(subdirs, rdir, output_file='fmworkdata.csv'):
+def write_to_csv(subdirs, rdir, output_file):
     data_parallelism=1
     with open(output_file, mode='w', newline='') as file:
         writer = csv.writer(file)
-        header = ['work','user','host','btim','etim','hw','hwc','back','mm','prec','dp','ii','oo','bb','tp','med','ttft','gen','itl','thp']
+        header = ['work','user','host','btim','etim','hw','hwc','back','mm','prec','dp','ii','oo','bb','tp','med','ttft','gen','itl','thp','extraparams','vllmvars']
         writer.writerow(header)
         for subdir in subdirs:
             fmwork_gen_lines = find_fmwork_gen_lines(subdir, rdir)
             vllm_version = find_vllmversion(subdir, rdir)
             model,prec = find_modelandprec(subdir, rdir)
+            extraparams,vllmvars = parse_extraparams(subdir, rdir)
             for line in fmwork_gen_lines:
                 modified_subdir, modified_fmwork_gen_line = modify_subdir(subdir, line)
-                combined_list = modified_subdir.split(',') + [vllm_version, model, prec, data_parallelism] + modified_fmwork_gen_line.split(',')
+                combined_list = modified_subdir.split(',') + [vllm_version, model, prec, data_parallelism] + modified_fmwork_gen_line.split(',') + [extraparams, vllmvars]
                 writer.writerow(combined_list)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python process.py <rdir_path>")
+    if len(sys.argv) != 3:
+        print("Usage: python process.py <rdir_path> <output_csv_path>")
         sys.exit(1)
 
     rdir = sys.argv[1]
+    outputcsv = sys.argv[2]
     subdirs = traverse_directory(rdir)
-    write_to_csv(subdirs, rdir)
-    print(f"FMWORK GEN data in all subdirectories have been written to fmworkdata.csv")
+    write_to_csv(subdirs, rdir, outputcsv)
+    print(f"FMWORK GEN data in all subdirectories have been written to", outputcsv)
