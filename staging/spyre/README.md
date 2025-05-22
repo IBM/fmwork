@@ -201,11 +201,12 @@ RUN 1024 / 128 / 1 / 1
 [spyre_model_runner:execute_model] t_token: 147.02ms
 ```
 
-Parse TTFT and ITL 
+Parse results  
 
 ```
-./parse.sh <result directory>
+./parse.sh <result directory> | xargs -n 9
 ```
+Output: < model mode iis oos bbs tp warmup(s) setup ttft(ms) itl(ms) >
 
 Exit and stop container
 
