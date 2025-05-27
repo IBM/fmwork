@@ -9,7 +9,7 @@ Clone and Install vllm in a v1.21.0 Gaudi3 pre/release docker container
 ```
 git clone https://github.com/HabanaAI/vllm-fork.git
 cd vllm-fork
-git checkout 1ee6b617
+git checkout v0.7.2+Gaudi-1.21.0
 pip install -r requirements-hpu.txt  
 python setup.py develop  
 ```
