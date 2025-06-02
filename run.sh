@@ -7,17 +7,18 @@ usage() {
     echo "Options:"
     echo "  --model|-m               Model path lub model stub"
     echo "  --bs|-b                  Specify the batch size, default: 128"
-    echo "  --tp_size|-t             Specify the number of HPUs, default: 1"
+    echo "  --tp_size|-t             Specify tensor parallelism size, default: 1"
     echo "  --fp8                    Enable or Disable fp8/quantization, default disabled"
     echo "  --vision                 Enable vision model, default disabled"
     echo "  --multistep              Enable multi-step scheduling feature by setting number of scheduled steps larger than 1, default: 1 (feature off)"
     echo "  --block_size             Specify the block size, default is 128 for bf16, 256 for fp8"
     echo "  --mpbs                   Max prompt batch size"
-    echo "  --block_bucket_step      Specify the block bucket step, default is 128"
+    echo "  --block_bucket_step      Specify the block bucket step, default is 64"
     echo "  --enable_prefix_caching  Enables automatic prefix caching, disabled by default"
     echo "  --tc                     Enable options for torch.compile"
     echo "  --split_qkv              Enable split qkv, default disabled"
-    echo "  --layers_per_graph       Number of layers per graph, default is 1"
+    echo "  --layers_per_graph       Number of layers per graph, default is 32"
+    echo "  --v1                     Run with vLLM V1"
     echo "  --help                   Display this help message"
     exit 1
 }
@@ -39,7 +40,9 @@ extract_last_folder_name() {
 
 tp_size=1
 scheduled_steps=1
-block_bucket_step=128
+block_bucket_step=64
+layers_per_graph=32
+v1=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -94,6 +97,10 @@ while [[ $# -gt 0 ]]; do
         --layers_per_graph)
             layers_per_graph=$2
             shift 2
+            ;;
+        --v1)
+            v1=1
+            shift 1
             ;;
         --help)
             usage
@@ -150,6 +157,11 @@ export VLLM_DECODE_BLOCK_BUCKET_MAX=$last_block
 # enable torch compile
 if [[ $torch_compile == "On" ]]; then
     export PT_HPU_LAZY_MODE=0
+    if [[ $tp_size -eq 1 ]]; then
+        # enable flags that improve performance for single card only
+        export PT_ENABLE_INT64_SUPPORT=0
+        export PT_HPU_ENABLE_EAGER_CACHE=true
+    fi
 else
     export PT_HPU_LAZY_MODE=1
 fi
@@ -158,7 +170,7 @@ fi
 EXTRA_FLAGS=""
 flavor=$(get_flavor)
 if [[ -n "$fp8" ]]; then
-    EXTRA_FLAGS+="--quantization inc --kv_cache_dtype fp8_inc --weights_load_device cpu "
+    EXTRA_FLAGS+="--quantization inc --kv_cache_dtype fp8_inc "
 
     # Check for QUANT_CONFIG environment variable
     if [[ -n "$QUANT_CONFIG" ]]; then  # If set, use it *exclusively*
@@ -195,7 +207,7 @@ export PT_HPU_ENABLE_LAZY_COLLECTIVES=true
 export EXPERIMENTAL_WEIGHT_SHARING=0
 export FUSER_ENABLE_LOW_UTILIZATION=true
 export ENABLE_FUSION_BEFORE_NORM=true
-export VLLM_USE_V1=0
+export VLLM_USE_V1=$v1
 
 if [[ -n "$vision" ]]; then
     python driver_vision \
@@ -219,6 +231,7 @@ else
       --dtype bfloat16 \
       --device hpu \
       -b $batch_size \
+      -M $batch_size \
       --block_size $block_size \
       --max_num_batched_tokens $max_num_batched_tokens \
       --num_scheduler_steps $scheduled_steps \

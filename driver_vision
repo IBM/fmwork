@@ -4,7 +4,7 @@
 Taken from https://github.com/IBM/fmwork/blob/vision @0391f4d0a9c0d6d606c1d8d98d608da7fe28f982
 
 Changes:
-  - add arguments --quiet_mode, --max_num_prefill_seqs
+  - add arguments --quiet_mode, --max_num_prefill_seqs, --quantization, --kv_cache_dtype
   - disable --enforce_eager
   - add <|image|> and <|begin_of_text|> tokens to the prompt
   - remove llm engine explicitly at the end of the script
@@ -65,6 +65,8 @@ def setup_args():
     parser.add_argument('--max_num_prefill_seqs', type = int, default  = 1)
     parser.add_argument('--num_scheduler_steps',  type = int, default  = 1)
     parser.add_argument('--reps',                 type = int, default  = 5)
+    parser.add_argument('--quantization',         type = str, default  = None)
+    parser.add_argument('--kv_cache_dtype',       type = str, default  = 'auto')
     parser.add_argument('--quiet_mode',           action = 'store_true')
     parser.parse_args(namespace = par)
 
@@ -85,6 +87,8 @@ def setup_engine():
         tensor_parallel_size = par.tensor_parallel_size,
         num_scheduler_steps  = par.num_scheduler_steps,
         max_num_prefill_seqs = par.max_num_prefill_seqs,
+        quantization         = par.quantization,
+        kv_cache_dtype       = par.kv_cache_dtype,
     )
 
 def setup_input():

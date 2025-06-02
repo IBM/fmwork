@@ -1,10 +1,10 @@
-#!/usr/bin/env -S python -u
+#!/usr/bin/env -S python3 -u
 
 """
-Taken from https://github.com/IBM/fmwork/tree/main @665d802c2e1e9a756e27f0c40eba9559d551d245
+Taken from https://github.com/IBM/fmwork/tree/main @c3dd0b7cf2d38991373fa93d977eac1643358075
 
 Changes:
-    - add arguments --device, --block_size, --weights_load_device, --num_scheduler_steps and --max_prompt_batch_size
+    - add arguments --max_num_batched_tokens, --enable_prefix_caching, --split_qkv
     - setup HPU related vLLM settings
     - remove llm engine explicitly at the end of the script
 """
@@ -12,16 +12,30 @@ Changes:
 import argparse
 import fmwork
 import torch
+import traceback
 import vllm
-
+import os
 
 class var: pass
 class par: pass
 
-
 def main():
 
     params()
+
+    if par.dataset_path:
+        fmwork.banner('DATASET')
+        t0 = fmwork.time_get()
+        fmwork.process_dataset(
+            par.dataset_path, par.dataset_format, par.dataset_mode,
+            par.model_path)
+        t1 = fmwork.time_get()
+        print(); print('FMWORK DATASET', '%.6f' % (fmwork.time_diff(t1, t0)))
+
+    os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = par.input_size
+    os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"] = par.output_size
+    os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = par.batch_size
+
     llm()
     runs()
     done()
@@ -34,6 +48,12 @@ def params():
 
     parser.add_argument('-m', '--model_path',
         type=str, required=True)
+    parser.add_argument(      '--dataset_format',
+        type=str, default='json', choices=['json', 'processed'])
+    parser.add_argument(      '--dataset_path',
+        type=str)
+    parser.add_argument(      '--dataset_mode',
+        type=str, default='expand', choices=['expand', 'real'])
     parser.add_argument('-i', '--input_size',
         type=str, required=True)
     parser.add_argument('-o', '--output_size',
@@ -54,13 +74,29 @@ def params():
         type=float, default=0.95)
     parser.add_argument('-e', '--enforce_eager',
         action='store_true')
-    parser.add_argument('--device', type=str, default="cuda")
-    parser.add_argument('--block_size', type=int, default=128)
+    parser.add_argument('-s', '--num_scheduler_steps',
+        type=int, default=1)
+    parser.add_argument(      '--use_v2_block_manager',
+        action='store_true')
+    parser.add_argument(      '--distributed_executor_backend',
+        default='mp')
+    parser.add_argument('-M', '--max_num_seqs',
+        type=int, default=512)
+    parser.add_argument('-C', '--enable_chunked_prefill',
+        type=str)
+    parser.add_argument('--id', type=str)
+    parser.add_argument('--show_reps', action='store_true')
+    parser.add_argument('--ignore_eos', type=str, default='True')
+    parser.add_argument('--debug_outputs', action='store_true')
+    parser.add_argument('--trace_outputs', action='store_true')
+    parser.add_argument('--stop_itl', type=float)
+    parser.add_argument('-D', '--device',
+        type=str, required=True, choices=['cpu', 'gpu', 'spyre', 'hpu'] )
+    parser.add_argument('--block_size', type=int, default=None)
     parser.add_argument('--max_num_batched_tokens', type=int, default=1024)
-    parser.add_argument('--weights_load_device', type=str, default=None)
-    parser.add_argument("--num_scheduler_steps", type=int, default=1)
-    parser.add_argument("--enable_prefix_caching", action="store_true")
-    parser.add_argument("--split_qkv", action="store_true")
+    parser.add_argument('--enable_prefix_caching', action='store_true')
+    parser.add_argument('--split_qkv', action='store_true')
+
     parser.parse_args(namespace=par)
 
     attrs = []
@@ -76,36 +112,104 @@ def params():
     var.output_sizes = list(map(int, par.output_size.split(',')))
     var.batch_sizes  = list(map(int, par.batch_size.split(',')))
 
+    if par.quantization == 'None': par.quantization = None
+
+    if not par.enable_chunked_prefill: par.enable_chunked_prefill = False
+    else: par.enable_chunked_prefill = \
+        par.enable_chunked_prefill == 'True' or \
+        par.enable_chunked_prefill == '1'
+
+    par.ignore_eos = par.ignore_eos == 'True' or \
+        par.ignore_eos == '1'
+
 def llm():
 
     fmwork.banner('LLM')
 
+    t0 = fmwork.time_get()
+
     var.llm = vllm.LLM(
-        dtype                  = par.dtype,
-        enforce_eager          = par.enforce_eager,
-        gpu_memory_utilization = par.gpu_memory_utilization,
-        kv_cache_dtype         = par.kv_cache_dtype,
-        max_model_len          = max(var.input_sizes) + max(var.output_sizes),
-        max_num_batched_tokens = par.max_num_batched_tokens,
-        model                  = par.model_path,
-        quantization           = par.quantization,
-        tensor_parallel_size   = par.tensor_parallel,
-        trust_remote_code      = True,
-        device                 = par.device,
-        block_size             = par.block_size,
-        max_num_seqs           = max(var.batch_sizes),
-        weights_load_device    = par.weights_load_device,
-        num_scheduler_steps    = par.num_scheduler_steps,
-        enable_prefix_caching  = par.enable_prefix_caching,
-        split_qkv              = par.split_qkv,
+        dtype                        = par.dtype,
+        enforce_eager                = par.enforce_eager,
+        gpu_memory_utilization       = par.gpu_memory_utilization,
+        kv_cache_dtype               = par.kv_cache_dtype,
+        max_model_len                = max(var.input_sizes) + max(var.output_sizes),
+        block_size                   = par.block_size,
+        model                        = par.model_path,
+        quantization                 = par.quantization,
+        tensor_parallel_size         = par.tensor_parallel,
+        trust_remote_code            = True,
+        num_scheduler_steps          = par.num_scheduler_steps,
+        #use_v2_block_manager         = par.use_v2_block_manager, # deprecated
+        distributed_executor_backend = par.distributed_executor_backend,
+        max_num_seqs                 = min(par.max_num_seqs, max(var.input_sizes) + max(var.output_sizes)),
+        enable_chunked_prefill       = par.enable_chunked_prefill,
+        device                       = par.device,
+        max_num_batched_tokens       = par.max_num_batched_tokens,
+        enable_prefix_caching        = par.enable_prefix_caching,
+        split_qkv                    = par.split_qkv,
     )
 
+    t1 = fmwork.time_get()
+
+    print(); print('FMWORK SETUP', '%.6f' % (fmwork.time_diff(t1, t0)))
+
 def runs():
+
+    oo1 = {}
 
     for batch_size in var.batch_sizes:
         for input_size in var.input_sizes:
             for output_size in var.output_sizes:
-                run(input_size, output_size, batch_size)
+                etim, med = run(input_size, output_size, batch_size)
+
+                if output_size == 1:
+                    if input_size not in oo1: oo1[input_size] = {}
+                    oo1[input_size][batch_size] = med
+                else:
+                    if input_size not in oo1: continue
+                    if batch_size not in oo1[input_size]: continue
+                    ttft = oo1[input_size][batch_size]
+                    gen  = med - ttft
+                    itl  = gen / output_size * 1000.0 # ms
+                    thp  = batch_size * output_size / gen
+
+                    print(
+                        'FMWORK GEN',
+                        etim,
+                        input_size,
+                        output_size,
+                        batch_size,
+                        par.tensor_parallel,
+                        '%.3f' % (med),
+                        '%.3f' % (gen),
+                        '%.3f' % (ttft),
+                        '%.1f' % (itl),
+                        '%.1f' % (thp),
+                    )
+
+                    print()
+                    print('TTFT / GEN Metrics')
+                    print('------------------')
+                    print()
+                    print('Experiment timestamp:            %s'   % (etim))
+                    print('Model path:                      %s'   % (par.model_path))
+                    print('Input size:                      %d'   % (input_size))
+                    print('Output size:                     %d'   % (output_size))
+                    print('Batch size:                      %d'   % (batch_size))
+                    print('Tensor parallel size:            %d'   % (par.tensor_parallel))
+                    print('MED  - Median iteration (s):     %.3f' % (med))
+                    print('TTFT - Time to first token (s):  %.3f' % (ttft))
+                    print('GEN  - Generation time (s):      %.3f' % (gen))
+                    print('ITL  - Inter-token latency (ms): %.1f' % (itl))
+                    print('THP  - Throughput (tok/s):       %.1f' % (thp))
+
+                    if par.stop_itl:
+                        if itl > float(par.stop_itl):
+                            print(); print(
+                                'Stopping at ITL >',
+                                '%.1f' % (par.stop_itl))
+                            return
 
 def run(input_size, output_size, batch_size):
 
@@ -117,15 +221,23 @@ def run(input_size, output_size, batch_size):
         par.tensor_parallel
     )
 
-    input_batch = fmwork.input_generator(
-        par.model_path,
-        input_size, batch_size,
-        return_tensors='np',
-    )
+    if not par.dataset_path:
+
+        input_batch = fmwork.input_generator(
+            par.model_path,
+            input_size, batch_size,
+            return_tensors='np')
+
+    else:
+
+        input_batch = fmwork.input_dataset(
+            par.model_path,
+            par.dataset_mode,
+            input_size, batch_size)
 
     sampling_params = vllm.SamplingParams(
         max_tokens = output_size,
-        ignore_eos = True,
+        ignore_eos = par.ignore_eos
     )
 
     kwargs = {
@@ -137,24 +249,38 @@ def run(input_size, output_size, batch_size):
     fmwork.reset()
 
     for rep in range(par.reps):
+        if not par.dataset_path:
+            kwargs['prompt_token_ids'] = fmwork.input_generator(
+                par.model_path,
+                input_size, batch_size,
+                return_tensors='np'
+            )
         fmwork.t0()
-        var.llm.generate(**kwargs)
-        if par.device == "hpu":
-            torch.hpu.synchronize()
-        else:
+        outputs = var.llm.generate(**kwargs)
+        try:
             torch.cuda.synchronize()
-        fmwork.t1(
+        except:
+            # will fail on CPU or AIU, so let it go
+            pass
+        ret = fmwork.t1(
             rep, par.reps,
             input_size, output_size, batch_size,
-            par.tensor_parallel)
+            par.tensor_parallel,
+            par.ignore_eos, outputs,
+            par.debug_outputs, par.trace_outputs)
+
+    return ret
 
 def done():
 
     fmwork.banner('DONE')
 
 if __name__ == '__main__':
-    main()
+    try: main()
+    except SystemExit: pass
+    except: traceback.print_exc()
 
     # Remove llm object explicitly, as it is handled by global variable.
     # Without this there could be a hang on TP>1
-    del var.llm
+    if hasattr(var, 'llm'):
+        del var.llm
