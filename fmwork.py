@@ -63,6 +63,78 @@ def input_generator(model, input_size, batch_size, return_tensors):
 
     return input_batch
 
+# --------------
+# sample dataset
+# --------------
+
+dataset = []
+
+def input_dataset(model, dataset_mode, input_size, batch_size):
+
+    if dataset_mode == 'expand': return input_dataset_expand(model, input_size, batch_size)
+    if dataset_mode == 'real':   return input_dataset_real(input_size, batch_size)
+
+def input_dataset_expand(model, input_size, batch_size):
+
+    import random
+    import transformers
+
+    tokenizer = transformers.AutoTokenizer.from_pretrained(model)
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+
+    result = [ [] for _ in range(batch_size) ]
+
+    for b in range(batch_size):
+        l, prompt = random.choice(dataset)
+        tokens = tokenizer(prompt)['input_ids']
+        while len(result[b]) < input_size:
+            result[b] += tokens
+        result[b] = result[b][:input_size]
+
+    return result
+
+def input_dataset_real(input_size, batch_size):
+
+    raise NotImplementedError()
+
+def process_dataset(dataset_path, dataset_format, dataset_mode, model):
+
+    import json
+    import transformers
+
+    from tqdm import tqdm
+
+    tokenizer = transformers.AutoTokenizer.from_pretrained(model)
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+
+    file = open(dataset_path)
+    data = json.load(file)
+
+    for item in tqdm(data, total = len(data), desc = 'Processing dataset'):
+        prompt = ''
+        for message in item['conversations']:
+            prompt += '[' + message['from'] + ']' + '\n\n'
+            prompt += message['value'] + '\n\n'
+        prompt = prompt.strip()
+
+        if dataset_mode == 'expand':
+            dataset.append((len(prompt), prompt))
+        if dataset_mode == 'real':
+            tokens = tokenizer(prompt)['input_ids']
+            dataset.append((len(tokens), tokens))
+
+    print()
+
+    a = 0; b = 1024
+    while a < 1024 * 1024:
+        print(
+            '%7d' % (b),
+            sum(1 for l, v in dataset if a < l <= b)),
+        a = b
+        b = b * 2
+
 # ------------
 # benchmarking
 # ------------
@@ -84,7 +156,9 @@ def t0(): var.t0s.append(time_get())
 def t1(
     rep, reps,
     input_size, output_size, batch_size,
-    tensor_parallel):
+    tensor_parallel,
+    ignore_eos=True, outputs=None,
+    debug_outputs=False, trace_outputs=False):
 
     var.t1s.append(time_get())
     dt = time_diff(var.t1s[-1], var.t0s[-1])
@@ -99,15 +173,37 @@ def t1(
         '%.1f' % (batch_size * output_size / dt), # throughput (tok/s)
     )
 
+    if not ignore_eos or debug_outputs:
+        print()
+        for output in outputs:
+            print(
+                'FMWORK OUT',
+                input_size, output_size, batch_size, tensor_parallel,
+                rep + 1,
+                '%.3f' % (dt),
+                len(output.prompt_token_ids),
+                len(output.outputs[0].token_ids),
+                output.metrics.arrival_time,
+                output.metrics.last_token_time,
+                output.metrics.first_scheduled_time,
+                output.metrics.first_token_time,
+                output.metrics.time_in_queue,
+                output.metrics.finished_time,
+                output.metrics.scheduler_time)
+            if trace_outputs:
+                print('FMWORK TXT', repr(output.outputs[0].text))
+                print('FMWORK TOK', output.outputs[0].token_ids)
+        print()
+
     if rep + 1 == reps:
-        show(input_size, output_size, batch_size, tensor_parallel)
+        return show(input_size, output_size, batch_size, tensor_parallel)
 
 def show(
     input_size, output_size, batch_size,
     tensor_parallel):
 
     _ign = 0.2
-    _ign = int(max(_ign * len(var.dts), 1))
+    _ign = int(max(_ign * len(var.dts), 1)) if len(var.dts) > 1 else 0
     _rem = var.dts[_ign:]
     _med = med(_rem)
     _itl = 1000.0 * _med / output_size
@@ -115,14 +211,16 @@ def show(
 
     print()
 
+    etim = datetime.datetime.now().strftime('%Y%m%d-%H%M%S.%f')
+
     print(
         'FMWORK RES',
-        datetime.datetime.now().strftime('%Y%m%d-%H%M%S.%f'),
+        etim,
         input_size,
         output_size,
         batch_size,
         tensor_parallel,
-        '%.3f' % (_med),
+        '%.6f' % (_med),
         '%.1f' % (_itl),
         '%.1f' % (_thp),
     )
@@ -132,8 +230,11 @@ def show(
     print('Input size                = %d'   % (input_size))
     print('Output size               = %d'   % (output_size))
     print('Batch size                = %d'   % (batch_size))
-    print('Tensor parallelism        = %d'   % (tensor_parallel))
-    print('Median iteration time (s) = %.3f' % (_med))
+    print('Median iteration time (s) = %.6f' % (_med))
     print('Inter-token latency (ms)  = %.1f' % (_itl))
     print('Throughput (tok/s)        = %.1f' % (_thp))
+
+    print()
+
+    return etim, _med
 
