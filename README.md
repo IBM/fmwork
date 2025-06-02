@@ -82,4 +82,55 @@ If saved to a file, all `RES` lines can be easily grep-ed for further analysis.
 ```
 grep -R "FMWORK RES" outputs/ | tr / ' ' | column -t
 ```
+- `FMWORK GEN` line also contains a summary of the experiment with additional metrics:
+    - Experiment timestamp
+    - Input size
+    - Output size
+    - Batch size
+    - Tensor parallelism size
+    - Median iteration duration (seconds)
+    - Time to fist token (seconds)
+    - Generation time (s)
+    - Inter-token latency (milliseconds per token)
+    - Throughput (tokens per second)
+
+To save experiment results to a directory, run the fmwork `runner` script instead of the `driver` script and provide the directory path in the `rdir` argument:
+```bash
+./fmwork/infer/vllm/runner --rdir ~/md0/fmwork-runs --mr ~/models/fmwork --mmtps granite-3.3-8b/bf16:1 --iis 1024 batch --oos 1,1024 batch --bbs 1,2,4 batch --devs 1:3:4:5/1,3:4,5/1,3,4,5/
+```
+To parse the results and save to a CSV file, run `process.py` with the the above `rdir` output directory path as the first argument and the desired CSV file path as the second argument:
+```bash
+cd fmwork/infer/vllm
+python process.py ~/md0/fmwork-runs ~/md0/fmwork-results/fmwork_data.csv
+```
+`process.py` will parse all of the fmwork results in the `rdir` directory and write the data to the CSV file with the following header: `work,user,host,btim,etim,hw,hwc,back,mm,prec,dp,ii,oo,bb,tp,med,ttft,gen,itl,thp,extraparams,vllmvars`
+
+| **Field**      | **Description**                                 |
+|----------------|-------------------------------------------------|
+| **work**       | quarter, year                                   |
+| **user**       | username                                        |
+| **host**       | hostname                                        |
+| **btim**       | batch (sweep) timestamp                         |
+| **etim**       | experiment timestamp                            |
+| **hw**         | hardware used (GPU model)                       |
+| **hwc**        | hardware count (number of GPUs used)            |
+| **back**       | backend inference engine (VLLM version)         |
+| **mm**         | model                                           |
+| **prec**       | floating point precision                        |
+| **dp**         | data parallelism (usually 1)                    |
+| **ii**         | input size                                      |
+| **oo**         | output size                                     |
+| **bb**         | batch size                                      |
+| **tp**         | tensor parallel size                            |
+| **med**        | inference time in seconds                       |
+| **ttft**       | time to first token                             |
+| **gen**        | generation time                                 |
+| **itl**        | inter-token latency                             |
+| **thp**        | throughput                                      |
+| **extraparams**| extra VLLM parameters                           |
+| **vllmvars**   | VLLM environment variables                      |
+
+
+
+
 

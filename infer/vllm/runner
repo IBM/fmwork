@@ -7,7 +7,7 @@ while [ -L "$SOURCE" ]; do
     [[ $SOURCE != /* ]] && SOURCE=$SDIR/$SOURCE; done
 SDIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
 
-if [[ ${#} -lt 19 ]]; then
+if [[ ${#} -lt 17 ]]; then
     if [[ "${1}" != "-h" && ${1} != "--help" ]]; then
         echo "error: missing arguments"
     fi
@@ -19,7 +19,6 @@ if [[ ${#} -lt 19 ]]; then
     echo "  oos:    output sizes + mode (split|batch)"
     echo "  bbs:    batch sizes  + mode (split|batch)"
     echo "  devs:   devsets (or 'auto')"
-    echo "  sdir:   suffix directory"
     exit 1
 fi
 
@@ -30,7 +29,6 @@ shift;   iis=${1}; shift; iis_mode=${1}; shift
 shift;   oos=${1}; shift; oos_mode=${1}; shift
 shift;   bbs=${1}; shift; bbs_mode=${1}; shift
 shift;  devs=${1}; shift
-shift;  sdir=${1}; shift
 
 if [[ ${iis_mode} == "split" ]]; then iis_for=${iis//,/ }; else iis_for=iis; fi
 if [[ ${oos_mode} == "split" ]]; then oos_for=${oos//,/ }; else oos_for=oos; fi
@@ -47,27 +45,25 @@ echo
 echo "${bdir}"
 echo
 
-extraparams=("${@:1}")
+extraparams=${@}
 paramsjson=$(jq -n \
     --arg rdir "$rdir" \
     --arg mr "$mr" \
-    --arg mms "$mms" \
+    --arg mmtps "$mmtps" \
     --arg iis "$iis" \
     --arg oos "$oos" \
     --arg bbs "$bbs" \
     --arg devs "$devs" \
-    --arg sdir "$sdir" \
-    --argjson extraparams "$(printf '%s\n' "${extra_params[@]}" | jq -R . | jq -s .)" \
+    --argjson extraparams "$(printf '%s\n' "${extraparams}" | jq -R . | jq -s .)" \
     '{
         rdir: $rdir,
         mr: $mr,
-        mms: $mms,
+        mmtps: $mmtps,
         iis: $iis,
         oos: $oos,
         bbs: $bbs,
         devs: $devs,
-        sdir: $sdir,
-        "@": $extraparams
+        extraparams: $extraparams
     }')
 
 echo "$paramsjson" | jq '.' > ${bdir}/params.json
