@@ -76,6 +76,7 @@ def params():
     parser.add_argument('--debug_outputs', action='store_true')
     parser.add_argument('--trace_outputs', action='store_true')
     parser.add_argument('--stop_itl', type=float)
+    parser.add_argument('--stop_ttft', type=float)
     parser.add_argument('--swap_space', type=int, default=4)
 
     parser.parse_args(namespace=par)
@@ -138,22 +139,27 @@ def llm():
 def runs():
 
     oo1 = {}
+    oor = {}
 
     for batch_size in var.batch_sizes:
         for input_size in var.input_sizes:
             for output_size in var.output_sizes:
-                etim, med = run(input_size, output_size, batch_size)
+                etim, med, madp = run(input_size, output_size, batch_size)
 
                 if output_size == 1:
-                    if input_size not in oo1: oo1[input_size] = {}
+                    if input_size not in oo1: 
+                        oo1[input_size] = {}
+                        oor[input_size] = {}
                     oo1[input_size][batch_size] = med
+                    oor[input_size][batch_size] = madp
                 else:
                     if input_size not in oo1: continue
                     if batch_size not in oo1[input_size]: continue
-                    ttft = oo1[input_size][batch_size]
-                    gen  = med - ttft
-                    itl  = gen / output_size * 1000.0 # ms
-                    thp  = batch_size * output_size / gen
+                    ttft   = oo1[input_size][batch_size]
+                    ttft_r = oor[input_size][batch_size]
+                    gen    = med - ttft
+                    itl    = gen / output_size * 1000.0 # ms
+                    thp    = batch_size * output_size / gen
 
                     print(
                         'FMWORK GEN',
@@ -162,6 +168,8 @@ def runs():
                         output_size,
                         batch_size,
                         par.tensor_parallel,
+                        '%.3f' % (ttft_r),
+                        '%.3f' % (madp),
                         '%.3f' % (med),
                         '%.3f' % (gen),
                         '%.3f' % (ttft),
@@ -179,18 +187,27 @@ def runs():
                     print('Output size:                     %d'   % (output_size))
                     print('Batch size:                      %d'   % (batch_size))
                     print('Tensor parallel size:            %d'   % (par.tensor_parallel))
-                    print('MED  - Median iteration (s):     %.3f' % (med))
-                    print('TTFT - Time to first token (s):  %.3f' % (ttft))
+                    print('MED  - Median iteration (s):     %.3f (%.3f)' % (med, madp))
+                    print('TTFT - Time to first token (s):  %.3f (%.3f)' % (ttft, ttft_r))
                     print('GEN  - Generation time (s):      %.3f' % (gen))
                     print('ITL  - Inter-token latency (ms): %.1f' % (itl))
                     print('THP  - Throughput (tok/s):       %.1f' % (thp))
 
-                    if par.stop_itl:
-                        if itl > float(par.stop_itl):
-                            print(); print(
-                                'Stopping at ITL >',
-                                '%.1f' % (par.stop_itl))
-                            return
+                    if batch_size > 2:
+
+                        if par.stop_ttft:
+                            if ttft > float(par.stop_ttft):
+                                print(); print(
+                                    'Stopping at TTFT >',
+                                    '%.1f' % (par.stop_ttft))
+                                return
+
+                        if par.stop_itl:
+                            if itl > float(par.stop_itl):
+                                print(); print(
+                                    'Stopping at ITL >',
+                                    '%.1f' % (par.stop_itl))
+                                return
 
 def run(input_size, output_size, batch_size):
 
