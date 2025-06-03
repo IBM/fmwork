@@ -162,7 +162,6 @@ function run {
         echo "${out}" | tr -s ' ' | cut -d ' ' -f 2 | xargs kill -2
         sleep 5
     fi
-    sleep 30
     unlock ${devset}
 
     echo -e "\e[95m$(printf "%-15s" ${devset}) \e[102mDONE\e[0m \e[93m${edir}\e[0m"
