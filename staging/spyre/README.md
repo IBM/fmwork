@@ -11,6 +11,12 @@ pip install huggingface-hub
 huggingface-cli download --cache-dir ./ --local-dir-use-symlinks False --revision main --local-dir models/granite-3.0-8b ibm-granite/granite-3.0-8b-instruct
 ```
 
+Need to login with your `APIkey`:
+
+```
+podman login -u iamapikey -p $(cat $HOME/.ssh/ibmcloudAPI.key) us.icr.io/wxpe-cicd-internal
+```
+
 Create container with podman 
 
 ```
