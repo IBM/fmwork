@@ -207,6 +207,7 @@ def show(
     _ign = int(max(_ign * len(var.dts), 1))
     _rem = var.dts[_ign:]
     _med = med(_rem)
+    _mad = mad(_rem)
     _itl = 1000.0 * _med / output_size
     _thp = batch_size * output_size / _med
 
@@ -232,10 +233,12 @@ def show(
     print('Output size               = %d'   % (output_size))
     print('Batch size                = %d'   % (batch_size))
     print('Median iteration time (s) = %.6f' % (_med))
+    print('Median abs. dev.          = %.6f' % (_mad))
+    print('Median abs. dev. p.       = %.3f' % (_mad/_med))
     print('Inter-token latency (ms)  = %.1f' % (_itl))
     print('Throughput (tok/s)        = %.1f' % (_thp))
 
     print()
 
-    return etim, _med
+    return etim, _med, _mad/_med
 
