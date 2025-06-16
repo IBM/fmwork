@@ -127,9 +127,9 @@ def llm():
         enable_chunked_prefill       = par.enable_chunked_prefill,
         swap_space                   = par.swap_space,
         enable_prefix_caching        = False,
-        compilation_config = {
-            'cudagraph_capture_sizes': var.batch_sizes,
-        },
+        # compilation_config = {
+        #     'cudagraph_capture_sizes': var.batch_sizes,
+        # },
     )
 
     t1 = fmwork.time_get()
