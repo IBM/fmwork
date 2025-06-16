@@ -21,8 +21,8 @@ args_add mm   --model_path
 args_add iis  --input_sizes
 args_add oos  --output_sizes
 args_add bbs  --batch_sizes
-args_add sss  --image_sizes
 args_add tps  --tensor_parallel_sizes
+args_add xxs  --image_sizes
 args_add devs --device_sets
 
 function args_parse {
@@ -55,13 +55,13 @@ tp_4=$(echo ${devs} | cut -d / -f 3)
 tp_8=$(echo ${devs} | cut -d / -f 4)
 
 for tp in ${tps//,/ }; do
+for xx in ${xxs//,/ }; do
 for ii in ${iis//,/ }; do
 for oo in ${oos//,/ }; do
 for bb in ${bbs//,/ }; do
-for ss in ${sss//,/ }; do
 
 etim="$(date +%Y%m%d-%H%M%S.%N)"
-edir="${bdir}/${etim}/${mm}/${tp}/${ii}/${oo}/${bb}/${ss}"
+edir="${bdir}/${etim}/${mm}/${tp}/${xx}/${ii}/${oo}/${bb}"
 mkdir -p ${edir}/utils
 
 LOCK=lock-$(hostname)-dev
@@ -108,8 +108,8 @@ devset=$(lock ${devsets})
 cmd="
 ${SDIR}/driver
     --model_path           ${mm}
-    --image_width          ${ss}
-    --image_height         ${ss}
+    --image_width          ${xx}
+    --image_height         ${xx}
     --input_size           ${ii}
     --output_size          ${oo}
     --batch_size           ${bb}
@@ -135,7 +135,7 @@ run &
 
 sleep 1
 
-done; done; done; done;done;
+done; done; done; done; done;
 
 wait
 

@@ -34,44 +34,47 @@ def main():
     setup_args()
     setup_input()
     setup_engine()
-    dts = benchmark()
-    show(dts)
+
+    ttfts, gens = benchmark()
+
+    show(ttfts, gens)
 
 def setup_args():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path',           type = str, required = True)
-    parser.add_argument('--image_url',            type = str)
-    parser.add_argument('--image_width',          type = int)
-    parser.add_argument('--image_height',         type = int)
-    parser.add_argument('--image_channels',       type = int, default  = 3)
-    parser.add_argument('--input_text',           type = str)
-    parser.add_argument('--input_size',           type = int)
-    parser.add_argument('--output_size',          type = int, required = True)
-    parser.add_argument('--batch_size',           type = int, required = True)
-    parser.add_argument('--tensor_parallel_size', type = int, required = True)
-    parser.add_argument('--max_model_len',        type = int)
-    parser.add_argument('--max_num_seqs',         type = int)
-    parser.add_argument('--num_scheduler_steps',  type = int, default  = 1)
-    parser.add_argument('--reps',                 type = int, default  = 5)
+    parser.add = parser.add_argument
+    parser.add('--model_path',           type=str, required=True)
+    parser.add('--image_url',            type=str)
+    parser.add('--image_width',          type=int)
+    parser.add('--image_height',         type=int)
+    parser.add('--image_channels',       type=int, default=3)
+    parser.add('--input_text',           type=str)
+    parser.add('--input_size',           type=int)
+    parser.add('--output_size',          type=int, required=True)
+    parser.add('--batch_size',           type=int, required=True)
+    parser.add('--tensor_parallel_size', type=int, required=True)
+    parser.add('--max_num_seqs',         type=int)
+    parser.add('--num_scheduler_steps',  type=int, default=1)
+    parser.add('--reps',                 type=int, default=5)
+    parser.add('--enforce_eager',        action='store_true')
+    parser.add('--stop_itl',             type=float)
+    parser.add('--stop_ttft',            type=float)
+
     parser.parse_args(namespace = par)
+
+    if not par.max_num_seqs:
+        par.max_num_seqs  = par.batch_size
 
 def setup_engine():
 
     banner('ENGINE')
 
-    max_model_len = par.max_model_len
-    if not max_model_len: max_model_len = par.input_size + par.output_size
-
-    max_num_seqs  = par.max_num_seqs
-    if not max_num_seqs:  max_num_seqs  = par.batch_size
-
     var.engine = LLM(
         model                = par.model_path,
-        max_model_len        = max_model_len,
-        max_num_seqs         = max_num_seqs,
+        max_num_seqs         = par.max_num_seqs,
+        max_model_len        = par.input_size + par.output_size + 2048,
         tensor_parallel_size = par.tensor_parallel_size,
-        enforce_eager        = True,
+        enforce_eager        = par.enforce_eager,
         num_scheduler_steps  = par.num_scheduler_steps,
     )
 
@@ -125,12 +128,23 @@ def setup_input_generate():
         if i in vocab:
             vocab.remove(i)
 
+    '''
     inputs = []
     for b in range(par.batch_size):
         inputs.append({
             'prompt_token_ids':
                 [128000, 128256, 128000] + np.random.choice(vocab, size = par.input_size - 3).tolist(),
             'multi_modal_data' : { 'image': setup_image() },
+        })
+    '''
+
+    inputs = []
+    for b in range(par.batch_size):
+        inputs.append({
+            'prompt': '<|image|><|begin_of_text|>' + tokenizer.decode(
+                np.random.choice(vocab, size = par.input_size).tolist()),
+            'multi_modal_data': {
+                'image': setup_image()},
         })
 
     return inputs
@@ -166,12 +180,15 @@ def setup_image_generate():
 
 def benchmark():
 
-    dts = []
+    ttfts = []
+    gens  = []
 
     for r in range(par.reps):
-        dts.append(run(r))
+        ttft, gen = run(r)
+        ttfts.append(ttft)
+        gens.append(gen)
 
-    return dts
+    return ttfts, gens
 
 def run(r):
 
@@ -184,7 +201,10 @@ def run(r):
     )
 
     t0 = time_get()
-    outputs = var.engine.generate(setup_input(), sampling_params)
+    outputs = var.engine.generate(
+        setup_input(),
+        sampling_params,
+        use_tqdm = False)
     t1 = time_get()
     dt = time_diff(t1, t0)
 
@@ -201,9 +221,16 @@ def run(r):
         print('output.outputs[0].text:')
         print()
         print(output.outputs[0].text)
+        print()
+        print('arrival_time        ', output.metrics.arrival_time)
+        print('first_scheduled_time', output.metrics.first_scheduled_time)
+        print('first_token_time    ', output.metrics.first_token_time)
+        print('finished_time       ', output.metrics.finished_time)
+        print('time_in_queue       ', output.metrics.time_in_queue)
+        print('scheduler_time      ', output.metrics.scheduler_time)
 
     print(); print(
-        'FMWORK REP',
+        'FMWORK OLD',
         input_size,
         output_size,
         batch_size,
@@ -213,13 +240,91 @@ def run(r):
         '%.1f' % (batch_size * output_size / dt),
     )
 
-    return dt
+    vllm_ttft = output.metrics.first_token_time - output.metrics.first_scheduled_time
+    vllm_inf  = output.metrics.finished_time    - output.metrics.arrival_time
+    vllm_gen  = output.metrics.finished_time    - output.metrics.first_token_time
+    vllm_itl  = vllm_gen * 1000.0 / output_size
+    vllm_thp  = batch_size * output_size / vllm_gen
 
-def show(dts):
+    # note that each concurrent (batched) request
+    # will produce an output object in the `outputs` list;
+    # while timings should be the same or very close
+    # (since the batch is processed as a single request),
+    # the output sizes might differ slightly
+    # due to encode / decode / encode
+    # done to synthesize the prompt;
+    # code below will just use the returns
+    # from the last output object in the list
+
+    print(); print(
+        'FMWORK REP',
+        datetime.datetime.now().strftime('%Y%m%d-%H%M%S.%f'),
+        r+1, par.reps,
+        par.input_size,
+        par.output_size,
+        par.batch_size,
+        par.tensor_parallel_size,
+        input_size,
+        output_size,
+        '%.3f' % (vllm_ttft),
+        '%.3f' % (vllm_inf),
+        '%.3f' % (vllm_gen),
+        '%.3f' % (vllm_itl),
+        '%.3f' % (vllm_thp),
+    )
+
+    return vllm_ttft, vllm_gen
+
+import numpy as np
+
+def avg(x): return np.mean(x)
+def std(x): return np.std(x)
+def med(x): return np.median(x)
+def mad(x): return med(np.absolute(x - med(x)))
+
+def show(ttfts, gens):
 
     banner('DONE')
 
     if par.reps < 2: return
+
+    ign = 0.2
+    ign = int(max(ign * len(ttfts), 1))
+
+    _ttfts = ttfts[ign:]
+    _gens  = gens[ign:]
+
+    _med = med(_gens)
+    _itl = _med * 1000.0 / par.output_size
+    _thp = par.batch_size * par.output_size / _med
+
+    print(); print(
+        'time', 
+        'image_w image_h',
+        'ii oo bb tp',
+        'mad_ttft mad_gen',
+        'ttft gen itl thp')
+
+    print(); print(
+        'FMWORK GEN',
+        datetime.datetime.now().strftime('%Y%m%d-%H%M%S.%f'),
+        par.image_width,
+        par.image_height,
+        par.input_size,
+        par.output_size,
+        par.batch_size,
+        par.tensor_parallel_size,
+        '%.3f' % (mad(_ttfts)), # err ttft
+        '%.3f' % (mad(_gens)),  # err gen
+        '%.3f' % (med(_ttfts)), # ttft
+        '%.3f' % (_med),        # gen
+        '%.3f' % (_itl),        # itl
+        '%.3f' % (_thp),        # thp
+    )
+
+    print()
+
+    '''
 
     ign = 0.2
     ign = int(max(ign * len(dts), 1))
@@ -255,6 +360,8 @@ def show(dts):
     print('Throughput (tok/s)        = %.1f' % (thp))
 
     print()
+
+    '''
 
 if __name__ == '__main__':
     try:
