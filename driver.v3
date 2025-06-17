@@ -1,0 +1,340 @@
+#!/usr/bin/env -S python -u
+
+import argparse
+import datetime
+import numpy as np
+import random
+import requests
+import time
+import traceback
+
+from PIL import Image
+from transformers import AutoTokenizer
+from vllm import LLM, SamplingParams
+
+class FMworkException(Exception): pass
+
+def banner(*s):
+    print(); print(80*'-');
+    print(' '.join(list(map(str,s))));
+    print(80*'-'); print()
+
+def time_get(): return time.time_ns()
+def time_diff(t1, t0): return float(t1 - t0) / 1E9
+def time_fmt(t): t = str(t).zfill(9); return '%s.%s' % (t[:-9], t[-9:])
+
+class par: pass # defined in parser
+class var: pass # defined below
+var.engine  = None
+var.__image = None
+
+def main():
+
+    setup_args()
+    setup_input(max(par.batch_sizes))
+    setup_engine()
+
+    for batch_size in par.batch_sizes:
+        banner(
+            'BENCHMARK',
+            par.input_size,
+            par.output_size,
+            batch_size,
+            par.tensor_parallel_size)
+        ttfts, infs = benchmark(batch_size)
+        show(batch_size, ttfts, infs)
+
+def setup_args():
+
+    parser = argparse.ArgumentParser()
+    parser.add = parser.add_argument
+    parser.add('--model_path',           type=str, required=True)
+    parser.add('--image_url',            type=str)
+    parser.add('--image_width',          type=int)
+    parser.add('--image_height',         type=int)
+    parser.add('--image_channels',       type=int, default=3)
+    parser.add('--input_text',           type=str)
+    parser.add('--input_size',           type=int)
+    parser.add('--output_size',          type=int, required=True)
+    parser.add('--batch_sizes',          type=str, required=True)
+    parser.add('--tensor_parallel_size', type=int, required=True)
+    parser.add('--max_num_seqs',         type=int)
+    parser.add('--num_scheduler_steps',  type=int, default=1)
+    parser.add('--reps',                 type=int, default=5)
+    parser.add('--enforce_eager',        action='store_true')
+    parser.add('--stop_itl',             type=float)
+    parser.add('--stop_ttft',            type=float)
+    parser.add('--debug',                action='store_true')
+
+    parser.parse_args(namespace = par)
+
+    par.batch_sizes = list(map(int, par.batch_sizes.split(',')))
+
+    if not par.max_num_seqs:
+        par.max_num_seqs  = max(par.batch_sizes)
+
+def setup_engine():
+
+    banner('ENGINE')
+
+    var.engine = LLM(
+        model                  = par.model_path,
+        # max_num_seqs         = par.max_num_seqs,
+        # max_model_len        = par.input_size + par.output_size + 2048,
+        max_num_seqs           = par.max_num_seqs,
+        max_model_len          = par.input_size + par.output_size + 6404,
+        max_seq_len_to_capture = 131072,
+        tensor_parallel_size   = par.tensor_parallel_size,
+        enforce_eager          = par.enforce_eager,
+        num_scheduler_steps    = par.num_scheduler_steps,
+        limit_mm_per_prompt    = {"images": 1, "videos": 0},
+        enable_prefix_caching  = False,
+    )
+
+def setup_input(batch_size):
+
+    if   par.input_text: return setup_input_text(batch_size)
+    elif par.input_size: return setup_input_generate(batch_size)
+    else:
+        raise FMworkException(
+            'Must define either --input_text or --input_size')
+
+def setup_input_text(batch_size):
+
+    messages = [
+        {
+            'role': 'user',
+            'content': [
+                { 'type': 'image' },
+                { 'type': 'text', 'text': par.input_text },
+            ],
+        },
+    ]
+
+    tokenizer = AutoTokenizer.from_pretrained(par.model_path)
+
+    prompt_token_ids = tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt = True,
+        tokenize = True,
+    )
+
+    par.input_size = len(prompt_token_ids)
+
+    inputs = []
+    for b in range(batch_size):
+        inputs.append({
+            'prompt_token_ids': prompt_token_ids,
+            'multi_modal_data' : { 'image': setup_image() },
+        })
+
+    return inputs
+
+def setup_input_generate(batch_size):
+
+    tokenizer = AutoTokenizer.from_pretrained(par.model_path)
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+
+    vocab = list(range(0, tokenizer.vocab_size))
+    for i in tokenizer.all_special_ids:
+        if i in vocab:
+            vocab.remove(i)
+
+    inputs = []
+    for b in range(batch_size):
+        inputs.append({
+            'prompt': '<|image|><|begin_of_text|>' + tokenizer.decode(
+                np.random.choice(vocab, size = par.input_size).tolist()),
+            'multi_modal_data': {
+                'image': setup_image()},
+        })
+
+    return inputs
+
+def setup_image():
+
+    if par.image_url:                          return setup_image_url()
+    elif par.image_width and par.image_height: return setup_image_generate()
+    else:
+        raise FMworkException(
+            'Must define either --image_url '\
+            'or --image_width and --image_height.')
+
+def setup_image_url():
+
+    if not var.__image:
+        var.__image = Image.open(
+            requests.get(par.image_url, stream = True).raw)
+        par.image_width, par.image_height = var.__image.size
+
+    return var.__image
+
+def setup_image_generate():
+
+    return Image.fromarray(
+        np.random.randint(
+            0,
+            255,
+            (par.image_height, par.image_width, par.image_channels),
+            dtype = np.uint8,
+        )
+    )
+
+def benchmark(batch_size):
+
+    ttfts = []
+    infs  = []
+
+    for r in range(par.reps):
+        ttft, inf = run(batch_size, r)
+        ttfts.append(ttft)
+        infs.append(inf)
+
+    return ttfts, infs
+
+def run(batch_size, r):
+
+    # banner('RUN %d / %d' % (r + 1, par.reps))
+
+    sampling_params = SamplingParams(
+        ignore_eos = True,
+        min_tokens = 1,
+        max_tokens = 1,
+    )
+
+    t0 = time_get()
+    outputs = var.engine.generate(
+        setup_input(batch_size),
+        sampling_params,
+        use_tqdm = False)
+    t1 = time_get()
+    dt = time_diff(t1, t0)
+
+    print(
+        'FMWORK DT',
+        par.input_size,
+        1,
+        batch_size,
+        par.tensor_parallel_size,
+        '%.6f' % (dt),
+    )
+
+    __ttft = dt
+
+    if par.stop_ttft:
+        if __ttft > par.stop_ttft and batch_size > 2:
+            print(); print('stop_ttft')
+            fini()
+
+    sampling_params = SamplingParams(
+        ignore_eos = True,
+        min_tokens = par.output_size,
+        max_tokens = par.output_size,
+    )
+
+    t0 = time_get()
+    outputs = var.engine.generate(
+        setup_input(batch_size),
+        sampling_params,
+        use_tqdm = False)
+    t1 = time_get()
+    dt = time_diff(t1, t0)
+
+    __inf = dt
+
+    __itl = ( __inf - __ttft ) / par.output_size
+
+    if par.stop_itl:
+        if __itl > par.stop_itl and batch_size > 2:
+            print(); print('stop_itl')
+            fini()
+
+    print(
+        'FMWORK DT',
+        par.input_size,
+        par.output_size,
+        batch_size,
+        par.tensor_parallel_size,
+        '%.6f' % (dt),
+    )
+
+    return __ttft, __inf
+
+import numpy as np
+
+def avg(x): return np.mean(x)
+def std(x): return np.std(x)
+def med(x): return np.median(x)
+def mad(x): return med(np.absolute(x - med(x)))
+
+def show(batch_size, ttfts, infs):
+
+    if par.reps < 2: return
+
+    ign = 0.2
+    ign = int(max(ign * len(ttfts), 1))
+
+    _ttfts = ttfts[ign:]
+    _infs  = infs[ign:]
+
+    _med = med(_infs) - med(_ttfts) # median generation time
+    _itl = _med * 1000.0 / par.output_size
+    _thp = batch_size * par.output_size / _med
+
+    # print(
+    #    'time',
+    #    'image_w image_h',
+    #    'ii oo bb tp',
+    #    'mad_ttft mad_gen',
+    #    'ttft gen itl thp')
+
+    print(); print(
+        'FMWORK GEN',
+        datetime.datetime.now().strftime('%Y%m%d-%H%M%S.%f'),
+        par.image_width,
+        par.image_height,
+        par.input_size,
+        par.output_size,
+        batch_size,
+        par.tensor_parallel_size,
+        '%.3f' % (mad(_ttfts)),
+        '%.3f' % (mad(_infs)),
+        '%.3f' % (med(_ttfts)), # ttft
+        '%.3f' % (_med),        # gen
+        '%.3f' % (_itl),        # itl
+        '%.3f' % (_thp),        # thp
+    )
+
+    if par.stop_ttft:
+        if med(_ttfts) > par.stop_ttft and batch_size > 2:
+            print(); print('stop_ttft')
+            fini()
+
+    if par.stop_itl:
+        if _itl > par.stop_itl and batch_size > 2:
+            print(); print('stop_itl')
+            fini()
+
+def fini():
+
+    banner('DONE')
+    if var.engine: del var.engine
+    exit(0)
+
+if __name__ == '__main__':
+    try:
+        main()
+        fini()
+    except SystemExit as e:
+        print('SystemExit with code', e.code)
+    except FMworkException as e:
+        print(e)
+        exit(1)
+    except KeyboardInterrupt:
+        print('Interrupted by user.')
+        exit(2)
+    except:
+        traceback.print_exc()
+        exit(3)
+

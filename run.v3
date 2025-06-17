@@ -1,0 +1,145 @@
+#!/bin/bash
+
+SOURCE=${BASH_SOURCE[0]}
+while [ -L "$SOURCE" ]; do
+    SDIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
+    SOURCE=$(readlink "$SOURCE")
+    [[ $SOURCE != /* ]] && SOURCE=$SDIR/$SOURCE; done
+SDIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
+
+args_list=""
+
+function args_add {
+    local short=${1};  shift
+    local long=${1:2}; shift
+    eval "${long}=${short}"
+    args_list+="${short} "
+}
+
+args_add rdir --base_output_dir
+args_add mm   --model_path
+args_add iis  --input_sizes
+args_add oos  --output_sizes
+args_add bbs  --batch_sizes
+args_add tps  --tensor_parallel_sizes
+args_add xxs  --image_sizes
+args_add devs --device_sets
+
+function args_parse {
+    while [[ ${#} > 0 ]]; do
+        local long=${1:2}; shift
+        short=$(eval "echo $(echo \$\{${long}\})")
+        if [[ -n "${short}" ]]; then
+            value=${1}; shift
+            eval "${short}=${value}"
+        fi
+    done
+}
+
+args_parse "${@}"
+
+user="$(whoami)"
+host="$(hostname)"
+btim="$(date +%Y%m%d-%H%M%S.%N)"
+bdir="${rdir}/${user}/${host}/${btim}"
+
+mkdir -p ${bdir}
+
+echo
+echo "${bdir}"
+echo
+
+tp_1=$(echo ${devs} | cut -d / -f 1)
+tp_2=$(echo ${devs} | cut -d / -f 2)
+tp_4=$(echo ${devs} | cut -d / -f 3)
+tp_8=$(echo ${devs} | cut -d / -f 4)
+
+for tp in ${tps//,/ }; do
+for xx in ${xxs//,/ }; do
+for ii in ${iis//,/ }; do
+for oo in ${oos//,/ }; do
+for bb in ${bbs//,/ }; do
+
+etim="$(date +%Y%m%d-%H%M%S.%N)"
+edir="${bdir}/${etim}/${mm}/${tp}/${xx}/${ii}/${oo}/bbs"
+mkdir -p ${edir}/utils
+
+LOCK=lock-$(hostname)-dev
+
+function lock {
+    local devsets=${1}; shift
+
+    while :; do
+        for devset in ${devsets//:/ }; do
+            locked=""
+            for dev in ${devset//,/ }; do
+                mkdir ${LOCK}.${dev} &> /dev/null
+
+                if [[ ${?} -eq 0 ]];
+                    then locked+="${dev} "
+                else
+                    for dev in ${locked}; do
+                        rmdir ${LOCK}.${dev} &> /dev/null
+                    done
+                    continue 2
+                fi
+            done
+            break 2 # devset found
+        sleep 1
+        done # try next devset
+    sleep 2
+    done # try next loop
+
+    echo ${devset}
+}
+
+function unlock {
+    local devset=${1}; shift
+
+    for dev in ${devset//,/ }; do
+        rmdir ${LOCK}.${dev}
+    done
+}
+
+devsets=$(eval echo \${tp_${tp}})
+if [[ -z "${devsets}" ]]; then continue; fi
+devset=$(lock ${devsets})
+
+cmd="
+${SDIR}/driver.v3
+    --model_path           ${mm}
+    --image_width          ${xx}
+    --image_height         ${xx}
+    --input_size           ${ii}
+    --output_size          ${oo}
+    --batch_sizes          ${bb}
+    --tensor_parallel_size ${tp}
+    --stop_ttft 60  --stop_itl 100
+"
+
+function run {
+    export PYTHONUNBUFFERED=1
+    export CUDA_DEVICE_ORDER=PCI_BUS_ID
+    export CUDA_VISIBLE_DEVICES=${devset}
+    env         &> ${edir}/utils/env
+    pip list    &> ${edir}/utils/pip-list
+    echo ${cmd}  > ${edir}/exp.cmd
+    eval ${cmd} &> ${edir}/exp.log
+    sleep 5
+    unlock ${devset}
+    echo -e "(${devset}) \e[92mDONE\e[0m \e[93m${edir}\e[0m"
+}
+    echo -e "(${devset}) \e[94mRUN \e[0m \e[93m${edir}\e[0m"
+
+run &
+
+sleep 1
+
+done; done; done; done; done;
+
+wait
+
+echo
+echo ${bdir}
+echo
+
