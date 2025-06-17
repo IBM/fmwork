@@ -61,7 +61,7 @@ for oo in ${oos//,/ }; do
 for bb in ${bbs//,/ }; do
 
 etim="$(date +%Y%m%d-%H%M%S.%N)"
-edir="${bdir}/${etim}/${mm}/${tp}/${xx}/${ii}/${oo}/bbs"
+edir="${bdir}/${etim}/${mm}/${tp}/${xx}/${ii}/${oo}/${bb}"
 mkdir -p ${edir}/utils
 
 LOCK=lock-$(hostname)-dev
