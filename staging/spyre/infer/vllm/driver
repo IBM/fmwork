@@ -130,7 +130,8 @@ def llm():
         distributed_executor_backend = par.distributed_executor_backend,
         max_num_seqs                 = par.max_num_seqs,
         enable_chunked_prefill       = par.enable_chunked_prefill,
-        max_num_batched_tokens       = max((max(var.input_sizes) + max(var.output_sizes))*max(var.batch_sizes), 2048)
+        max_num_batched_tokens       = max((max(var.input_sizes) + max(var.output_sizes))*max(var.batch_sizes), 2048),
+        enable_prefix_caching        = False
     )
 
     t1 = fmwork.time_get()
