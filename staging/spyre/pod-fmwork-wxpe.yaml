@@ -1,0 +1,60 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: spyre-dev-4aiu-perf
+  namespace: a9-perfbenchmark
+  labels:
+    deployer: zhuoran
+    termination-mode: manual
+spec:
+  schedulerName: aiu-scheduler
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - resources:
+        limits:
+          ibm.com/aiu_pf: '4'
+        requests:
+          ibm.com/aiu_pf: '4'
+      terminationMessagePath: /dev/termination-log
+      name: app
+      command:
+        - /usr/bin/pause
+      env:
+        - name: HF_HOME
+          value: /mnt/home/zhuoran
+        - name: FLEX_COMPUTE
+          value: SENTIENT
+        - name: FLEX_DEVICE
+          value: PF
+        - name: HOME
+          value: /mnt/home/
+        - name: TOKENIZERS_PARALLELISM
+          value: 'false'
+        - name: AIU_SETUP_MULTI_AIU
+          value: '1'
+      securityContext:
+        capabilities:
+          drop:
+            - MKNOD
+      imagePullPolicy: Always
+      volumeMounts:
+        - name: dev-shm
+          mountPath: /dev/shm
+        - name: squad-shared-pvc
+          mountPath: /mnt/home
+      terminationMessagePolicy: File
+      image: us.icr.io/wxpe-cicd-internal/dd2/aiu-vllm-dev@sha256:bf91298abdbb16364e67761a2c809ce64d3bfd33766a97f5b3b0182654a368ed
+  serviceAccount: default
+  imagePullSecrets:
+    - name: zhuoranliu-pull-secret-ete13
+    - name: zhuoranliu-pull-secret
+  volumes:
+    - name: dev-shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 64Gi
+    - name: squad-shared-pvc
+      persistentVolumeClaim:
+        claimName: a9-perfbenchmark

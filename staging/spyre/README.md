@@ -2,7 +2,74 @@
 
 FM Benchmarking Framework
 
-## Quick start
+## Quick start on Openshift Cluster
+
+1. Create a pod on cluster:
+```bash
+oc apply -f pod-fmwork-wxpe.yaml
+```
+**Note:**
+In this yaml, please modify `name`, `namespace`, `imagePullSecrets`, `persistentVolumeClaim`
+
+2. Steps required by cluster and image:
+```
+bash -l
+# Check if .senlib.json exists under ${HOME}/.senlib.json, if not please follow the next step and if it exists please skip it
+# need to add https://github.ibm.com/ai-foundation/aiu-inference-dev/blob/main/dd2/.senlib.json in $HOME 
+vi ${HOME}/.senlib.json
+source /opt/vllm/bin/activate
+```
+3. Downloaded HF model: `ibm-granite/granite-3.3-8b-instruct`
+```
+pip install huggingface-hub
+huggingface-cli download --cache-dir ./ --local-dir-use-symlinks False --revision main --local-dir <model_path> ibm-granite/granite-3.3-8b-instruct
+```
+4. Environment variables we ran with (06/25/2025):
+```
+export VLLM_USE_V1=1 # should be by default
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+# to run with Host DMA due to the switch structure of the cluster
+export FLEX_RDMA_MODE_FULL=FALSE
+export FLEX_HDMA_MODE_FULL=1
+
+export OMP_NUM_THREADS=32
+```
+5. Run experiments in the pod:
+- the command if you want to have TTFT numbers:
+
+```
+./infer/vllm/driver --model_path ${model_path} --input_size 1024 --output_size 1,128 --batch_size 4 --tensor_parallel 4 --rep 5
+```
+
+6. outputs:
+This should produce blocks of outputs like:
+```
+FMWORK GEN 20250621-014836.577621 1024 128 1 4 6.831 6.473 0.358 50.6 19.8
+
+TTFT / GEN Metrics
+------------------
+
+Experiment timestamp:            20250621-014836.577621
+Model path:                      /mnt/home/zhuoran/fmwork/staging/spyre/models/ibm-granite/granite-3.3-8b-instruct
+Input size:                      1024
+Output size:                     128
+Batch size:                      1
+Tensor parallel size:            4
+MED  - Median iteration (s):     6.831
+TTFT - Time to first token (s):  0.358
+GEN  - Generation time (s):      6.473
+ITL  - Inter-token latency (ms): 50.6
+THP  - Throughput (tok/s):       19.8
+
+Settings for Spyre
+------------------
+
+OMP_NUM_THREADS:                 32
+FLEX_HDMA_MODE_FULL:             1
+FLEX_RDMA_MODE_FULL:             None
+COLL_ALLREDUCE_ALGO:             None
+```
+## Quick start on bare metal (TBD)
 
 Get a model (e.g., https://huggingface.co/ibm-granite/granite-3.0-8b-instruct):
 
