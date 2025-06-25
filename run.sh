@@ -9,7 +9,6 @@ usage() {
     echo "  --bs|-b                  Specify the batch size, default: 128"
     echo "  --tp_size|-t             Specify tensor parallelism size, default: 1"
     echo "  --fp8                    Enable or Disable fp8/quantization, default disabled"
-    echo "  --dynamic_scale          Enable or Disable dynamic scale, default disabled"
     echo "  --vision                 Enable vision model, default disabled"
     echo "  --multistep              Enable multi-step scheduling feature by setting number of scheduled steps larger than 1, default: 1 (feature off)"
     echo "  --block_size             Specify the block size, default is 128 for bf16, 256 for fp8"
@@ -57,10 +56,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --fp8)
             fp8="On"
-            shift 1
-            ;;
-        --dynamic_scale)
-            dynamic_scale="On"
             shift 1
             ;;
         --vision)
@@ -187,12 +182,6 @@ if [[ -n "$fp8" ]]; then
     fi 
 fi
 
-# enable dynamic scale
-if [[ -n "$dynamic_scale" ]]; then
-    export RUNTIME_SCALE_PATCHING=1
-    export PT_HPU_ENABLE_H2D_SCALES=1
-fi
-
 # enable delayed sampling or multi-step scheduling
 if [[ $scheduled_steps -eq 1 ]]; then
     export VLLM_DELAYED_SAMPLING=true
@@ -219,7 +208,6 @@ export EXPERIMENTAL_WEIGHT_SHARING=0
 export FUSER_ENABLE_LOW_UTILIZATION=true
 export ENABLE_FUSION_BEFORE_NORM=true
 export VLLM_USE_V1=$v1
-export VLLM_EXPONENTIAL_BUCKETING=false
 
 if [[ -n "$vision" ]]; then
     python driver_vision \
