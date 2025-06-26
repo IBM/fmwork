@@ -71,7 +71,7 @@ def params():
     parser.add_argument('-k', '--kv_cache_dtype',
         type=str, default='auto')
     parser.add_argument('-u', '--gpu_memory_utilization',
-        type=float, default=0.95)
+        type=float, default=0.98)
     parser.add_argument('-e', '--enforce_eager',
         action='store_true')
     parser.add_argument('-s', '--num_scheduler_steps',
