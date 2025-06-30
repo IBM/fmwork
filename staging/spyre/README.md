@@ -70,12 +70,13 @@ FLEX_RDMA_MODE_FULL:             None
 COLL_ALLREDUCE_ALGO:             None
 ```
 
-### 7. outputs to json (for database)
+### 7. output logs to payload json (for database)
 
 Assume we ran with `vLLM=v1`, the command is: 
 
+**Note**: `v1/<model_name>/<precision>` is required in the structure for the following parsing steps.
 ````
-./infer/vllm/driver --model_path ${model_path} --input_size 1024 --output_size 1,128 --batch_size 4 --tensor_parallel 4 --rep 5   2>&1  | tee  <output_path>/v1/<name>.txt
+./infer/vllm/driver --model_path ${model_path} --input_size 1024 --output_size 1,128 --batch_size 4 --tensor_parallel 4 --rep 5   2>&1  | tee  <output_path>/v1/<model_name>/<precision>/<name>.txt
 ````
 To generate metadata_id, we need to run this inside the image:
 
