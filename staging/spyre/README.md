@@ -4,14 +4,14 @@ FM Benchmarking Framework
 
 ## Quick start on Openshift Cluster
 
-1. Create a pod on cluster:
+### 1. Create a pod on cluster:
 ```bash
 oc apply -f pod-fmwork-wxpe.yaml
 ```
 **Note:**
 In this yaml, please modify `name`, `namespace`, `imagePullSecrets`, `persistentVolumeClaim`
 
-2. Steps required by cluster and image:
+### 2. Steps required by cluster and image:
 ```
 bash -l
 # Check if .senlib.json exists under ${HOME}/.senlib.json, if not please follow the next step and if it exists please skip it
@@ -19,12 +19,12 @@ bash -l
 vi ${HOME}/.senlib.json
 source /opt/vllm/bin/activate
 ```
-3. Downloaded HF model: `ibm-granite/granite-3.3-8b-instruct`
+### 3. Downloaded HF model: `ibm-granite/granite-3.3-8b-instruct`
 ```
 pip install huggingface-hub
 huggingface-cli download --cache-dir ./ --local-dir-use-symlinks False --revision main --local-dir <model_path> ibm-granite/granite-3.3-8b-instruct
 ```
-4. Environment variables we ran with (06/25/2025):
+### 4. Environment variables we ran with (06/25/2025):
 ```
 export VLLM_USE_V1=1 # should be by default
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
@@ -34,14 +34,14 @@ export FLEX_HDMA_MODE_FULL=1
 
 export OMP_NUM_THREADS=32
 ```
-5. Run experiments in the pod:
+### 5. Run experiments in the pod:
 - the command if you want to have TTFT numbers:
 
 ```
 ./infer/vllm/driver --model_path ${model_path} --input_size 1024 --output_size 1,128 --batch_size 4 --tensor_parallel 4 --rep 5
 ```
 
-6. outputs:
+###  6. output example:
 This should produce blocks of outputs like:
 ```
 FMWORK GEN 20250621-014836.577621 1024 128 1 4 6.831 6.473 0.358 50.6 19.8
@@ -69,6 +69,38 @@ FLEX_HDMA_MODE_FULL:             1
 FLEX_RDMA_MODE_FULL:             None
 COLL_ALLREDUCE_ALGO:             None
 ```
+
+### 7. outputs to json (for database)
+
+Assume we ran with `vLLM=v1`, the command is: 
+
+````
+./infer/vllm/driver --model_path ${model_path} --input_size 1024 --output_size 1,128 --batch_size 4 --tensor_parallel 4 --rep 5  | <output_path>/v1/<name>.txt
+````
+To generate metadata_id, we need to run this inside the image:
+
+```
+git clone https://github.ibm.com/ai-foundation/transformer-ft-eval.git -b meta_gen
+cd transformer-ft-eval
+export IMAGE_URL=<image url>
+python gen_metadata.py
+```
+To generate payloads in json from logs from fmwork:
+```
+# opts: to record any other configurations we tuned, could be empty
+python  jsonfy-metadataid.py --path <output_path>/v1 --output <output json file> --metadata_id <metadata_id generated> --opts "HDMA,OMP_NUM_THREADS=32"
+```
+Example command to upload:
+```
+curl -X POST \
+  'https://aiu-benchmark.apps.cash-washington-01-satellite.cash.res.ibm.com/v1/benchmark' \
+  -H 'accept: application/json' \
+  -H 'X-API-Key: <API-key>' \
+  -H 'Content-Type: application/json' \
+  -d @<output json file>
+```
+
+
 ## Quick start on bare metal (TBD)
 
 Get a model (e.g., https://huggingface.co/ibm-granite/granite-3.0-8b-instruct):
