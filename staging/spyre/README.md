@@ -75,7 +75,7 @@ COLL_ALLREDUCE_ALGO:             None
 Assume we ran with `vLLM=v1`, the command is: 
 
 ````
-./infer/vllm/driver --model_path ${model_path} --input_size 1024 --output_size 1,128 --batch_size 4 --tensor_parallel 4 --rep 5  | <output_path>/v1/<name>.txt
+./infer/vllm/driver --model_path ${model_path} --input_size 1024 --output_size 1,128 --batch_size 4 --tensor_parallel 4 --rep 5   2>&1  | tee  <output_path>/v1/<name>.txt
 ````
 To generate metadata_id, we need to run this inside the image:
 
