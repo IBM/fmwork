@@ -229,6 +229,7 @@ if [[ -n "$vision" ]]; then
       --input_size $input_sizes \
       --output_size $output_sizes \
       --batch_size $batch_size \
+      --block_size $block_size \
       --tensor_parallel_size $tp_size \
       --max_num_prefill_seqs $max_prompt_batch_size \
       --num_scheduler_steps $scheduled_steps \

@@ -66,6 +66,7 @@ def setup_args():
     parser.add_argument('--num_scheduler_steps',  type = int, default  = 1)
     parser.add_argument('--reps',                 type = int, default  = 5)
     parser.add_argument('--quantization',         type = str, default  = None)
+    parser.add_argument('--block_size',           type = int, default  = 128)
     parser.add_argument('--kv_cache_dtype',       type = str, default  = 'auto')
     parser.add_argument('--quiet_mode',           action = 'store_true')
     parser.parse_args(namespace = par)
@@ -89,6 +90,7 @@ def setup_engine():
         max_num_prefill_seqs = par.max_num_prefill_seqs,
         quantization         = par.quantization,
         kv_cache_dtype       = par.kv_cache_dtype,
+        block_size           = par.block_size,
     )
 
 def setup_input():
