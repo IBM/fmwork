@@ -136,7 +136,7 @@ else
     last_block=$((batch_size * max_model_len / block_size))
 fi
 
-first_block=$((batch_size * (input_sizes + block_size) / block_size))
+first_block=$((batch_size * (input_sizes) / block_size))
 last_block=$((last_block + block_bucket_step))
 
 if [ -z ${max_prompt_batch_size+x} ]; then
@@ -146,10 +146,10 @@ max_num_batched_tokens=$((input_sizes * max_prompt_batch_size))
 
 export VLLM_PROMPT_SEQ_BUCKET_STEP=$block_bucket_step
 export VLLM_PROMPT_SEQ_BUCKET_MIN=$input_sizes
-export VLLM_PROMPT_SEQ_BUCKET_MAX=$input_sizes
+export VLLM_PROMPT_SEQ_BUCKET_MAX=$max_model_len
 export VLLM_PROMPT_BS_BUCKET_MAX=$max_prompt_batch_size
 export VLLM_DECODE_BS_BUCKET_MIN=$batch_size
-export VLLM_DECODE_BS_BUCKET_STEP=16
+export VLLM_DECODE_BS_BUCKET_STEP=$batch_size
 export VLLM_DECODE_BS_BUCKET_MAX=$batch_size
 export VLLM_DECODE_BLOCK_BUCKET_MIN=$first_block
 export VLLM_DECODE_BLOCK_BUCKET_STEP=$block_bucket_step
