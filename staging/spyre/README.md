@@ -70,7 +70,7 @@ FLEX_RDMA_MODE_FULL:             None
 COLL_ALLREDUCE_ALGO:             None
 ```
 
-### 7. output logs to payload json (for database)
+### 7. Convert logs to JSON payloads json (for database)
 
 Assume we ran with `vLLM=v1`, the command is: 
 
@@ -88,9 +88,20 @@ python gen_metadata.py
 ```
 To generate payloads in json from logs from fmwork:
 ```
-# opts: to record any other configurations we tuned, could be empty
-python  jsonfy-metadataid.py --path <output_path>/v1 --output <output json file> --metadata_id <metadata_id generated> --opts "HDMA,OMP_NUM_THREADS=32"
+
+python  jsonfy-metadataid.py --path <output_path>/v1 --output <output json file> --metadata_id <metadata_id generated> --opts <could be empty>
 ```
+
+* `--path`: Root directory containing model/precision folders with FMWORK logs.
+
+* `--output`: Path to save the final JSON file.
+
+* `--metadata_id`: generated as the above.
+
+* `--opts` (optional): Custom configuration string. If present, it will be appended to system settings parsed from the logs (under `Settings for Spyre`).
+
+**Note**: If `Settings for Spyre` is found in the logs, it will be parsed into `opts` automatically. The `--opts` string will be appended to those values.
+
 Example command to upload:
 ```
 curl -X POST \

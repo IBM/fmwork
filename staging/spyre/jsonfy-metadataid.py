@@ -39,9 +39,12 @@ def main():
             json.dump(results, f, indent=4)
 
 def process(path, args, mm, mv):
+    # Initialize variables
     etim = ii = oo = bb = tp = warmup = setup = ttft = itl = thp = None
     engine = "vllm/v1"
+    spyre_opts = None
 
+    # Read log file
     try:
         with open(path, 'r') as f:
             s = f.read()
@@ -49,26 +52,38 @@ def process(path, args, mm, mv):
         print(f"Error reading file: {path}")
         return
 
+    # Basic validation: must contain FMWORK GEN and DONE markers
     if 'FMWORK GEN' not in s:
         print('\nError: No GEN --', path)
         return
-
     if 'DONE' not in s:
         print('\nError: No DONE --', path)
         return
 
-    for l in s.splitlines():
+    # Split log file into lines
+    lines = s.splitlines()
+    spyre_start_idx = None  # index of "Settings for Spyre" block (if any)
+
+    # Parse line by line
+    for i, l in enumerate(lines):
         l = l.strip()
         split = l.split()
 
+        # Identify the start of Spyre settings block
+        if l == 'Settings for Spyre':
+            spyre_start_idx = i + 2  # skip title and dashed line
+
+        # Extract warmup time
         if 'Warmup took' in l:
             warmup = l.split('Warmup took ')[1].split(' ')[0]
             warmup = re.sub(r'[a-zA-Z]', '', warmup)
             warmup = float(warmup)
 
+        # Extract setup time
         if l.startswith('FMWORK SETUP'):
             setup = float(split[2])
 
+        # Extract metrics from FMWORK GEN line
         if l.startswith('FMWORK GEN'):
             if 'nan' in l:
                 print('Error: GEN with nan --', path)
@@ -85,20 +100,38 @@ def process(path, args, mm, mv):
             itl  = float(split[10])
             thp  = float(split[11])
 
-    model_name = mm
-    precision = mv
+    # Extract key-value settings under "Settings for Spyre"
+    if spyre_start_idx is not None and spyre_start_idx + 3 < len(lines):
+        spyre_lines = lines[spyre_start_idx:spyre_start_idx + 4]
+        kv_pairs = []
+        for line in spyre_lines:
+            if ':' in line:
+                key, val = map(str.strip, line.split(':', 1))
+                kv_pairs.append(f"{key}:{val}")
+        spyre_opts = ','.join(kv_pairs)
+    else:
+        spyre_opts = ''
 
+    # Final opts: combine Spyre settings (if any) with command-line opts
+    if spyre_opts and args.opts:
+        opts_final = spyre_opts + ',' + args.opts
+    elif spyre_opts:
+        opts_final = spyre_opts
+    else:
+        opts_final = args.opts
+
+    # Build result dictionary
     result = {
         'timestamp':  etim,
         'metadata_id': args.metadata_id,
         'engine':     engine,
-        'model':      model_name,
-        'precision':  precision,
+        'model':      mm,
+        'precision':  mv,
         'input':      ii,
         'output':     oo,
         'batch':      bb,
         'tp':         tp,
-        'opts':       args.opts,
+        'opts':       opts_final,
         'warmup':     warmup,
         'setup':      setup,
         'ttft':       ttft,
@@ -106,10 +139,12 @@ def process(path, args, mm, mv):
         'thp':        thp,
     }
 
+    # Print summary line
     print('FMWORK POS',
           ' '.join(map(str, result.values())),
           path)
 
+    # If debug mode is on, print JSON-formatted result
     if args.debug:
         print()
         print(json.dumps(result, indent=4))
