@@ -265,8 +265,7 @@ def run(input_size, output_size, batch_size):
             par.debug_outputs, par.trace_outputs,
             batch_size_times=par.batch_size_times)
 
-    etim, med = ret
-    return etim, med / par.batch_size_times
+    return ret
 
 def done():
 
