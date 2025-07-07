@@ -144,7 +144,7 @@ if [ -z ${max_prompt_batch_size+x} ]; then
 fi
 max_num_batched_tokens=$((input_sizes * max_prompt_batch_size))
 
-export VLLM_PROMPT_SEQ_BUCKET_STEP=$block_bucket_step
+export VLLM_PROMPT_SEQ_BUCKET_STEP=$block_size
 export VLLM_PROMPT_SEQ_BUCKET_MIN=$input_sizes
 export VLLM_PROMPT_SEQ_BUCKET_MAX=$max_model_len
 export VLLM_PROMPT_BS_BUCKET_MAX=$max_prompt_batch_size
