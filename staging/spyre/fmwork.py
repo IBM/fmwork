@@ -158,7 +158,9 @@ def t1(
     input_size, output_size, batch_size,
     tensor_parallel,
     ignore_eos=True, outputs=None,
-    debug_outputs=False, trace_outputs=False):
+    debug_outputs=False, trace_outputs=False,
+    batch_size_times=1):
+
 
     var.t1s.append(time_get())
     dt = time_diff(var.t1s[-1], var.t0s[-1])
@@ -168,10 +170,11 @@ def t1(
         'FMWORK REP',
         '%3d / %3d :' % (rep + 1, reps),
         '%s %s' % (time_fmt(var.t0s[-1]), time_fmt(var.t1s[-1])),
-        '%.3f' % (dt),                            # rep time (s)
-        '%.1f' % (1000.0 * dt / output_size),     # inter-token latency (ms)
-        '%.1f' % (batch_size * output_size / dt), # throughput (tok/s)
+        '%.3f' % (dt / batch_size_times),
+        '%.1f' % (1000.0 * dt / output_size / batch_size_times),
+        '%.1f' % (batch_size * output_size / dt * batch_size_times),
     )
+
 
     if not ignore_eos or debug_outputs:
         print()
@@ -196,16 +199,18 @@ def t1(
         print()
 
     if rep + 1 == reps:
-        return show(input_size, output_size, batch_size, tensor_parallel)
+        return show(input_size, output_size, batch_size, tensor_parallel, batch_size_times)
+
 
 def show(
     input_size, output_size, batch_size,
-    tensor_parallel):
+    tensor_parallel,
+    batch_size_times=1):
 
     _ign = 0.2
     _ign = int(max(_ign * len(var.dts), 1))
     _rem = var.dts[_ign:]
-    _med = med(_rem)
+    _med = med(_rem) / batch_size_times
     _itl = 1000.0 * _med / output_size
     _thp = batch_size * output_size / _med
 

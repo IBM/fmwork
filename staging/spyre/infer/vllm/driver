@@ -83,6 +83,8 @@ def params():
     parser.add_argument('--debug_outputs', action='store_true')
     parser.add_argument('--trace_outputs', action='store_true')
     parser.add_argument('--stop_itl', type=float)
+    parser.add_argument('-bt', '--batch_size_times',
+        type=int, default=3)
 
     parser.parse_args(namespace=par)
 
@@ -145,7 +147,7 @@ def runs():
     for batch_size in var.batch_sizes:
         for input_size in var.input_sizes:
             for output_size in var.output_sizes:
-                etim, med = run(input_size, output_size, batch_size)
+                etim, med = run(input_size, output_size, batch_size * par.batch_size_times)
 
                 if output_size == 1:
                     if input_size not in oo1: oo1[input_size] = {}
@@ -187,6 +189,11 @@ def runs():
                     print('GEN  - Generation time (s):      %.3f' % (gen))
                     print('ITL  - Inter-token latency (ms): %.1f' % (itl))
                     print('THP  - Throughput (tok/s):       %.1f' % (thp))
+                    print(f'# Note: runtime averaged over batch_size_times={par.batch_size_times}')
+                    print(f'# The first (and last) dequeue of the task queue isn‘t a full batch.')
+                    print(f'# To make it deterministic, for a specific batch size (e.g., {batch_size}),')
+                    print(f'# feed batch_size * batch_size_times = {batch_size * par.batch_size_times} samples')
+                    print(f'# to saturate the engine and amortize the efficiency lost in the first and last batch.')
                     print()
 
                     print('Settings for Spyre')
@@ -255,9 +262,11 @@ def run(input_size, output_size, batch_size):
             input_size, output_size, batch_size,
             par.tensor_parallel,
             par.ignore_eos, outputs,
-            par.debug_outputs, par.trace_outputs)
+            par.debug_outputs, par.trace_outputs,
+            batch_size_times=par.batch_size_times)
 
-    return ret
+    etim, med = ret
+    return etim, med / par.batch_size_times
 
 def done():
 
