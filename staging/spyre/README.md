@@ -6,7 +6,8 @@ FM Benchmarking Framework
 
 ### 1. Create a pod on cluster:
 ```bash
-oc apply -f pod-fmwork-wxpe.yaml
+oc apply -f pod-fmwork.yaml  # updated on July
+oc apply -f pod-fmwork-wxpe.yaml # it's used before July 2025
 ```
 **Note:**
 In this yaml, please modify `name`, `namespace`, `imagePullSecrets`, `persistentVolumeClaim`
@@ -38,8 +39,22 @@ export OMP_NUM_THREADS=32
 - the command if you want to have TTFT numbers:
 
 ```
-./infer/vllm/driver --model_path ${model_path} --input_size 1024 --output_size 1,128 --batch_size 4 --tensor_parallel 4 --rep 5
+./infer/vllm/driver --model_path ${model_path} --input_size 1024 --output_size 1,128 --batch_size 4 --tensor_parallel 4 --rep 5 --batch_size_times 100
 ```
+Note on 07/07/2025:
+We introduce a new benchmarking methodology to address batch size scaling fidelity.
+For batch size N > 1, we now feed significantly more than N samples (instead of exactly N) during benchmarking.
+This saturates the engine and amortizes efficiency losses from the first and last batch, ensuring more representative TTFT/ITL results.
+
+* In this setup, `--batch_size_times` controls how many requests are sent to the engine.
+
+* Specifically, the engine receives `batch_size_times × batch_size` total requests.
+
+* Importantly, only one compiled engine is used, shaped to the specified `--batch_size`.
+
+* For all reported numbers (from both `FMWORK GEN` and `FMWORK RES`), we have already divided the raw metrics by `batch_size_times`, so the values are properly normalized.
+
+e.g., `--batch_size 4 --batch_size_times 100` will issue 400 requests, all using a batch size-4 compiled engine. Reported TTFT/ITL will reflect per-inference averages.
 
 ###  6. output example:
 This should produce blocks of outputs like:
