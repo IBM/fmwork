@@ -7,7 +7,7 @@ import os
 import torch
 import traceback
 import vllm
-
+import time
 class var: pass
 class par: pass
 
@@ -85,6 +85,8 @@ def params():
     parser.add_argument('--stop_itl', type=float)
     parser.add_argument('-bt', '--batch_size_times',
         type=int, default=1)
+    parser.add_argument('--delay_per_iter', type=float, default=0,
+    help='Time to sleep (in seconds) between iterations. Default is 0.')
 
     parser.parse_args(namespace=par)
 
@@ -264,7 +266,7 @@ def run(input_size, output_size, batch_size):
             par.ignore_eos, outputs,
             par.debug_outputs, par.trace_outputs,
             batch_size_times=par.batch_size_times)
-
+        time.sleep(par.delay_per_iter)
     return ret
 
 def done():
