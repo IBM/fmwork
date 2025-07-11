@@ -103,8 +103,11 @@ python gen_metadata.py
 ```
 To generate payloads in json from logs from fmwork:
 ```
-
-python  jsonfy-metadataid.py --path <output_path>/v1 --output <output json file> --metadata_id <metadata_id generated> --opts <could be empty>
+python jsonfy-metadataid.py \
+  --path <output_path>/v1 \
+  --output <output_json_file> \
+  --metadata_id <your_metadata_id> \
+  --model ibm-granite/granite-3.3-8b-instruct
 ```
 
 * `--path`: Root directory containing model/precision folders with FMWORK logs.
@@ -113,9 +116,14 @@ python  jsonfy-metadataid.py --path <output_path>/v1 --output <output json file>
 
 * `--metadata_id`: generated as the above.
 
+* `--model`: Hugging Face model ID (e.g., ibm-granite/granite-3.3-8b-instruct).
+If provided, this will override the default model name parsed from the folder structure, and will be used as the "model" field in the output JSON.
+
 * `--opts` (optional): Custom configuration string. If present, it will be appended to system settings parsed from the logs (under `Settings for Spyre`).
 
-**Note**: If `Settings for Spyre` is found in the logs, it will be parsed into `opts` automatically. The `--opts` string will be appended to those values.
+**Note**: 
+* The value of the "model" field in the JSON payload must be a **standard Hugging Face model ID**, as required by the metadata database schema.
+* If `Settings for Spyre` is found in the logs, it will be parsed into `opts` automatically. The `--opts` string will be appended to those values.
 
 Example command to upload:
 ```

@@ -11,9 +11,12 @@ def main():
     parser.add('--output',      type=str)
     parser.add('--debug',       action='store_true')
     parser.add('--opts',        type=str, default="")
+    parser.add('--model', type=str, default=None, help="Hugging Face model ID (e.g., ibm-granite/granite-3.3-8b-instruct), Override model name in output JSON")
     args = parser.parse_args()
 
     print()
+    if args.model:
+        print(f"Overriding model name with: {args.model}")
     results = []
 
     for mm in os.listdir(args.path):
@@ -125,7 +128,7 @@ def process(path, args, mm, mv):
         'timestamp':  etim,
         'metadata_id': args.metadata_id,
         'engine':     engine,
-        'model':      mm,
+        'model':      args.model if args.model else mm,
         'precision':  mv,
         'input':      ii,
         'output':     oo,
