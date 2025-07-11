@@ -86,7 +86,12 @@ def params():
     parser.add_argument('-bt', '--batch_size_times',
         type=int, default=1)
     parser.add_argument('--delay_per_iter', type=float, default=0,
-    help='Time to sleep (in seconds) between iterations. Default is 0.')
+        help='Time to sleep (in seconds) between iterations. Default is 0.')
+    parser.add_argument('--enable_profiler',
+        nargs='?',
+        const='./vllm_profile',
+        default=None,
+        help='Enable torch profiler. Optionally specify output dir (default: ./vllm_profile)')
 
     parser.parse_args(namespace=par)
 
@@ -112,6 +117,14 @@ def params():
 
     par.ignore_eos = par.ignore_eos == 'True' or \
         par.ignore_eos == '1'
+    if par.enable_profiler:
+        profiler_dir = par.enable_profiler
+        try:
+            os.makedirs(profiler_dir, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: could not create profiler output dir ({profiler_dir}): {e}")
+        os.environ["VLLM_TORCH_PROFILER_DIR"] = profiler_dir
+        print(f"Profiler is ENABLED — trace will be saved to: {profiler_dir}")
 
 def llm():
 
@@ -252,7 +265,16 @@ def run(input_size, output_size, batch_size):
 
     for rep in range(par.reps):
         fmwork.t0()
-        outputs = var.llm.generate(**kwargs)
+        if par.enable_profiler and rep == 1:
+            try:
+                var.llm.start_profile()
+                outputs = var.llm.generate(**kwargs)
+                var.llm.stop_profile()
+            except Exception as e:
+                print("Profiler error:", e)
+                outputs = var.llm.generate(**kwargs)
+        else:
+            outputs = var.llm.generate(**kwargs)
         try:
             # for cuda devices
             torch.cuda.synchronize()

@@ -56,6 +56,20 @@ This saturates the engine and amortizes efficiency losses from the first and las
 
 e.g., `--batch_size 4 --batch_size_times 100` will issue 400 requests, all using a batch size-4 compiled engine. Reported TTFT/ITL will reflect per-inference averages.
 
+**Note** on 07/11/2025: You can now enable PyTorch profiler via `--enable_profiler [optional_output_dir]`.  
+Tracing runs only at **rep == 1** and does **not** affect reported TTFT/ITL metrics.
+
+* You can simply run:  
+  `--enable_profiler` → traces will be saved to `./vllm_profile` (default)
+
+* Or specify a custom output path:  
+  `--enable_profiler /tmp/trace_dir`
+
+* Trace filenames are auto-generated (e.g., include timestamps); no fixed naming.
+
+* If profiling fails, the benchmark continues normally without interruption.
+
+
 ###  6. output example:
 This should produce blocks of outputs like:
 ```
