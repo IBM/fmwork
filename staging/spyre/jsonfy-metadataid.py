@@ -19,21 +19,34 @@ def main():
         print(f"Overriding model name with: {args.model}")
     results = []
 
-    for mm in os.listdir(args.path):
-        path_ = os.path.join(args.path, mm)
-        if not os.path.isdir(path_):
-            continue
-
-        for mv in os.listdir(path_):
-            path__ = os.path.join(path_, mv)
-            if not os.path.isdir(path__):
+    if args.model:
+        # Only use a dummy placeholder for mm since it's overridden anyway
+        mm = "__model"
+        for mv in os.listdir(args.path):
+            path_ = os.path.join(args.path, mv)
+            if not os.path.isdir(path_):
                 continue
-
-            for item in os.listdir(path__):
-                path___ = os.path.join(path__, item)
-                result = process(path___, args, mm, mv)
+            for item in os.listdir(path_):
+                path__ = os.path.join(path_, item)
+                result = process(path__, args, mm, mv)
                 if result:
                     results.append(result)
+    else:
+        for mm in os.listdir(args.path):
+            path_ = os.path.join(args.path, mm)
+            if not os.path.isdir(path_):
+                continue
+
+            for mv in os.listdir(path_):
+                path__ = os.path.join(path_, mv)
+                if not os.path.isdir(path__):
+                    continue
+
+                for item in os.listdir(path__):
+                    path___ = os.path.join(path__, item)
+                    result = process(path___, args, mm, mv)
+                    if result:
+                        results.append(result)
 
     print()
 
