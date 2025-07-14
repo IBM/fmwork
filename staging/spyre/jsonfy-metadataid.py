@@ -78,24 +78,24 @@ def process(path, args, mm, mv):
 
     # Split log file into lines
     lines = s.splitlines()
-    spyre_start_idx = None  # index of "Settings for Spyre" block (if any)
 
-    # Parse line by line
+    # Parse line by line to extract metadata and locate Spyre config block
+    spyre_start_idx = None  # index of the "Settings for Spyre" header
     for i, l in enumerate(lines):
         l = l.strip()
         split = l.split()
 
-        # Identify the start of Spyre settings block
-        if l == 'Settings for Spyre':
-            spyre_start_idx = i + 2  # skip title and dashed line
+        # Detect the start of Spyre config block (just record the index)
+        if l.startswith('Settings for Spyre'):
+            spyre_start_idx = i
 
-        # Extract warmup time
+        # Extract warmup time from line like: "Warmup took XXs"
         if 'Warmup took' in l:
             warmup = l.split('Warmup took ')[1].split(' ')[0]
             warmup = re.sub(r'[a-zA-Z]', '', warmup)
             warmup = float(warmup)
 
-        # Extract setup time
+        # Extract setup time from: "FMWORK SETUP <time_in_ms>"
         if l.startswith('FMWORK SETUP'):
             setup = float(split[2])
 
@@ -104,29 +104,45 @@ def process(path, args, mm, mv):
             if 'nan' in l:
                 print('Error: GEN with nan --', path)
                 return
+            etim =       split[2]     # timestamp
+            ii   =   int(split[3])    # input length
+            oo   =   int(split[4])    # output length
+            bb   =   int(split[5])    # batch size
+            tp   =   int(split[6])    # tensor parallelism
+            inf  = float(split[7])    # inference time
+            gen  = float(split[8])    # generation time
+            ttft = float(split[9])    # time to first token
+            itl  = float(split[10])   # iteration latency
+            thp  = float(split[11])   # throughput
 
-            etim =       split[2]
-            ii   =   int(split[3])
-            oo   =   int(split[4])
-            bb   =   int(split[5])
-            tp   =   int(split[6])
-            inf  = float(split[7])
-            gen  = float(split[8])
-            ttft = float(split[9])
-            itl  = float(split[10])
-            thp  = float(split[11])
-
-    # Extract key-value settings under "Settings for Spyre"
-    if spyre_start_idx is not None and spyre_start_idx + 3 < len(lines):
-        spyre_lines = lines[spyre_start_idx:spyre_start_idx + 4]
+    # Extract key-value pairs under "Settings for Spyre"
+    if spyre_start_idx is not None:
         kv_pairs = []
-        for line in spyre_lines:
-            if ':' in line:
-                key, val = map(str.strip, line.split(':', 1))
-                kv_pairs.append(f"{key}:{val}")
+        lines_after = lines[spyre_start_idx + 1:]
+        start_idx = None
+
+        # Find the first dashed line after the title (e.g. "------------------")
+        for idx, line in enumerate(lines_after):
+            if line.strip().startswith('---'):
+                start_idx = idx + 1  # actual config starts after the dashed line
+                break
+
+        # Collect key-value pairs until next dashed line (e.g. "--------------")
+        if start_idx is not None:
+            for line in lines_after[start_idx:]:
+                line = line.strip()
+                if line.startswith('--'):
+                    break  # end of Spyre block
+                if not line:
+                    continue  # skip blank lines
+                if ':' in line:
+                    key, val = map(str.strip, line.split(':', 1))
+                    kv_pairs.append(f"{key}:{val}")
+
         spyre_opts = ','.join(kv_pairs)
     else:
         spyre_opts = ''
+
 
     # Final opts: combine Spyre settings (if any) with command-line opts
     if spyre_opts and args.opts:
