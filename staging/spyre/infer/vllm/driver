@@ -18,7 +18,7 @@ def main():
     # spyre environment variables
     os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = par.input_size
     max_output = max(var.output_sizes)
-    repeated_max = ",".join([str(max_output)] * len(par.input_size))
+    repeated_max = ",".join([str(max_output)] * len(par.input_size.split(",")))
     os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"] = repeated_max
     os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = par.batch_size
 
