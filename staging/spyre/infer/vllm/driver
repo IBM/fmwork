@@ -24,10 +24,6 @@ def main():
     os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"] = repeated_output
     os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = par.batch_size
 
-    print("NEW_TOKENS:", os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"])
-    print("NEW_TOKENS:", os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"])
-    print("NEW_TOKENS:", os.environ["VLLM_SPYRE_WARMUP_BATCH_SIZES"])
-
     if par.dataset_path:
         fmwork.banner('DATASET')
         t0 = fmwork.time_get()
