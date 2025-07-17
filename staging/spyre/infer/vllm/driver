@@ -16,11 +16,17 @@ def main():
     params()
 
     # spyre environment variables
-    os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = par.input_size
+    max_input = max(var.input_sizes)
+    repeated_input = ",".join([str(max_input)] * len(var.batch_sizes))
+    os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = repeated_input
     max_output = max(var.output_sizes)
-    repeated_max = ",".join([str(max_output)] * len(par.input_size.split(",")))
-    os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"] = repeated_max
+    repeated_output = ",".join([str(max_output)] * len(var.batch_sizes))
+    os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"] = repeated_output
     os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = par.batch_size
+
+    print("NEW_TOKENS:", os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"])
+    print("NEW_TOKENS:", os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"])
+    print("NEW_TOKENS:", os.environ["VLLM_SPYRE_WARMUP_BATCH_SIZES"])
 
     if par.dataset_path:
         fmwork.banner('DATASET')
