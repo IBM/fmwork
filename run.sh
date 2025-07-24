@@ -135,7 +135,7 @@ fi
 
 if [[ -n "$vision" ]]; then
     image_size=256
-    num_encoder_tokens=1601 # for current image size
+    num_encoder_tokens=6404  # for current image size
     last_block=$((batch_size * (max_model_len + num_encoder_tokens) / block_size))
 else
     last_block=$((batch_size * max_model_len / block_size))
