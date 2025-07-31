@@ -43,13 +43,18 @@ def process_opt(globals_dict, subs, opts, i):
 
     # process key
 
-    key   = key[2:]                     # remove --
-    key   = key.replace(' ', '\x01')    # replace spaces by placeholder
-    key   = key.replace('.', ' ')       # replace dots by spaces (to shlex)
-    split = shlex.split(key)            # split preserving quotes
+    is_eval = False
+    if key[-1] == '@':
+        is_eval = True
+        key = key[:-1]
+
+    key     = key[2:]                   # remove --
+    key     = key.replace(' ', '\x01')  # replace spaces by placeholder
+    key     = key.replace(':', ' ')     # replace colons by spaces (to shlex)
+    split   = shlex.split(key)          # split preserving quotes
 
     for idx in range(len(split)):                    # iterate over split
-        split[idx] = split[idx].replace(' ', '.')    # revert dots
+        split[idx] = split[idx].replace(' ', ':')    # revert colons
         split[idx] = split[idx].replace('\x01', ' ') # revert spaces
 
     # process sub
@@ -61,7 +66,8 @@ def process_opt(globals_dict, subs, opts, i):
     # process val
 
     val = opts[i+1]
-    val = eval(val, globals_dict)
+    if is_eval:
+        val = eval(val, globals_dict)
 
     # dig into dict
 
