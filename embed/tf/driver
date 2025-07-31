@@ -11,15 +11,17 @@ import os
 import torch
 import transformers
 
-#   ------------------
-#   program entrypoint
-#   ------------------
+#   -------------
+#   main function
+#   -------------
 
 def main():
 
-    args     = setup_args()
-    platform = setup_platform(args)
-    model    = setup_model(args)
+    args  = setup_args()
+    setup_runtime(args)
+    model = setup_model(args)
+
+    bench(args, model)
 
 #   ---------------------------------------
 #   read and process command line arguments
@@ -36,6 +38,7 @@ def setup_args():
     parser.add('--model_root',  type=str)
     parser.add('--model_name',  type=str, required=True)
     parser.add('--compile',     action='store_true')
+    parser.add('--eval',        action='store_true')
     parser.add('--input_sizes', type=str, required=True)
     parser.add('--batch_sizes', type=str, required=True)
     args, opts = parser.parse_known_args()
@@ -51,11 +54,13 @@ def setup_args():
 #   set up platform specific options and components
 #   -----------------------------------------------
 
-def setup_platform(args):
+def setup_runtime(args):
 
-    if args.platform == 'spyre': return setup_platform_spyre(args)
+    torch.set_grad_enabled(False) # disable gradient computation globally
 
-def setup_platform_spyre(args):
+    if args.platform == 'spyre': return setup_runtime_spyre(args)
+
+def setup_runtime_spyre(args):
 
     from torch_sendnn import torch_sendnn
 
@@ -66,7 +71,7 @@ def setup_platform_spyre(args):
 def setup_model(args):
 
     fmwork.banner('MODEL')
-    
+
     model_path = (
         os.path.join(args.model_root, args.model_name)
         if args.model_root
@@ -84,26 +89,37 @@ def setup_model(args):
     if args.platform != 'spyre':
         model = model.to(args.platform)
 
-    print(model)
-
-    if args.compile:
-        model = setup_compile(args, model)
-
-#   -------------
-#   compile model
-#   -------------
-
-def setup_compile(args, model):
-
-    fmwork.banner('COMPILE')
-
-    model = torch.compile(
-        model,
-        **args.subs['compile'])
+    if args.compile: model = torch.compile(model, **args.subs['compile'])
+    if args.eval:    model.eval()
 
     print(model)
 
-    return model
+#   --------------------------
+#   benchmark logic entrypoint
+#   --------------------------
+
+def bench(args, model):
+
+    input_sizes = list(map(int, args.input_sizes.split(',')))
+    batch_sizes = list(map(int, args.batch_sizes.split(',')))
+
+    for batch_size in batch_sizes:
+        for input_size in input_sizes:
+            run(args, model, input_size, batch_size)
+
+#   ---------------------------------
+#   run one combination of parameters
+#   ---------------------------------
+
+def run(args, model, input_size, batch_size):
+
+    fmwork.banner('RUN', input_size, batch_size)
+
+    print('hello')
+
+#   ------------------
+#   program entrypoint
+#   ------------------
 
 if __name__ == '__main__':
     main(); print()
