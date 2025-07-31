@@ -43,7 +43,7 @@ def setup_args():
     parser.add('--batch_sizes', type=str, required=True)
     args, opts = parser.parse_known_args()
     fmwork.args.process_opts(args, opts, [
-        'compile', 'model',
+        'compile', 'model', 'torch.call', 'torch.set',
     ], globals())
 
     fmwork.args.show(args)
@@ -56,12 +56,31 @@ def setup_args():
 
 def setup_runtime(args):
 
+    fmwork.banner('RUNTIME')
+
+    print('> setup_runtime: torch')
+
+    if 'torch.call' in args.subs:
+        print(); print('\t', 'torch.call')
+        for key in args.subs['torch.call']:
+            val = args.subs['torch.call'][key]
+            print('\t\t', key, val)
+
+    if 'torch.set' in args.subs:
+        print(); print('\t', 'torch.set')
+        for key in args.subs['torch.set']:
+            val = args.subs['torch.set'][key]
+            print('\t\t', key, val)
+
     torch.set_grad_enabled(False) # disable gradient computation globally
 
     if args.platform == 'spyre': return setup_runtime_spyre(args)
 
 def setup_runtime_spyre(args):
 
+    print('> setup_runtime: spyre')
+
+    print('\t', 'torch_sendnn')
     from torch_sendnn import torch_sendnn
 
 #   -----------------------------------------------
