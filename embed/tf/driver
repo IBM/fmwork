@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+sys.path.insert(0, os.path.join(
+    os.path.dirname(__file__), '../../utils/python'))
+import fmwork
+
+import argparse
+import os
+import torch
+import transformers
+
+#   ------------------
+#   program entrypoint
+#   ------------------
+
+def main():
+
+    args     = setup_args()
+    platform = setup_platform(args)
+    model    = setup_model(args)
+
+#   ---------------------------------------
+#   read and process command line arguments
+#   ---------------------------------------
+
+def setup_args():
+
+    fmwork.banner('ARGS')
+
+    parser = argparse.ArgumentParser()
+    parser.add = parser.add_argument
+    parser.add('--platform',    type=str, required=True)
+    parser.add('--model_class', type=str, required=True)
+    parser.add('--model_root',  type=str)
+    parser.add('--model_name',  type=str, required=True)
+    parser.add('--compile',     action='store_true')
+    parser.add('--input_sizes', type=str, required=True)
+    parser.add('--batch_sizes', type=str, required=True)
+    args, opts = parser.parse_known_args()
+    fmwork.args.process_opts(args, opts, [
+        'compile', 'model',
+    ], globals())
+
+    fmwork.args.show(args)
+
+    return args
+
+#   -----------------------------------------------
+#   set up platform specific options and components
+#   -----------------------------------------------
+
+def setup_platform(args):
+
+    if args.platform == 'spyre': return setup_platform_spyre(args)
+
+def setup_platform_spyre(args):
+
+    from torch_sendnn import torch_sendnn
+
+#   -----------------------------------------------
+#   load model and call other model setup functions
+#   -----------------------------------------------
+
+def setup_model(args):
+
+    fmwork.banner('MODEL')
+    
+    model_path = (
+        os.path.join(args.model_root, args.model_name)
+        if args.model_root
+        else args.model_name
+    )
+
+    model = getattr(
+        transformers,
+        args.model_class,
+    ).from_pretrained(
+        model_path,
+        **args.subs['model'],
+    )
+
+    if args.platform != 'spyre':
+        model = model.to(args.platform)
+
+    print(model)
+
+    if args.compile:
+        model = setup_compile(args, model)
+
+#   -------------
+#   compile model
+#   -------------
+
+def setup_compile(args, model):
+
+    fmwork.banner('COMPILE')
+
+    model = torch.compile(
+        model,
+        **args.subs['compile'])
+
+    print(model)
+
+    return model
+
+if __name__ == '__main__':
+    main(); print()
+
