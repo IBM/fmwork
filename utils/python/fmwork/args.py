@@ -83,6 +83,26 @@ def process_opt(globals_dict, subs, opts, i):
 
 def show(args):
 
+    import sys
+
+    cli = sys.argv[1:]
+    tmp = vars(args)
+    lst = []
+
+    i = 0
+    while i < len(cli):
+        key = cli[i][2:]; i += 1
+        if key in tmp and isinstance(getattr(args, key), bool):
+            lst.append(f'--{key}')
+        else:
+            val = cli[i]; i += 1
+            lst.append(f'--{key} {val}')
+
+    for s in sorted(lst):
+        print(s)
+
+    print()
+
     tmp = vars(args)
     tmp = {k: v for k, v in tmp.items() if k != 'sublist'}
 
@@ -113,5 +133,7 @@ def to_evaluable_strings(obj):
 
     if isinstance(obj, dict):
         return {k: to_evaluable_strings(v) for k, v in obj.items()}
+    elif isinstance(obj, str):
+        return obj
     else:
         return repr(obj)
