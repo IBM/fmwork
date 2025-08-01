@@ -20,6 +20,7 @@ def main():
     args  = setup_args()
     setup_runtime(args)
     model = setup_model(args)
+    gen   = setup_gen(args)
 
     bench(args, model)
 
@@ -41,6 +42,7 @@ def setup_args():
     parser.add('--eval',        action='store_true')
     parser.add('--input_sizes', type=str, required=True)
     parser.add('--batch_sizes', type=str, required=True)
+    parser.add('--reps',        type=int, required=True)
     args, opts = parser.parse_known_args()
     fmwork.args.process_opts(args, opts, [
         'compile', 'model', 'torch.call', 'torch.set',
@@ -50,35 +52,35 @@ def setup_args():
 
     return args
 
-#   -----------------------------------------------
-#   set up platform specific options and components
-#   -----------------------------------------------
+#   ----------------------------------------------------------
+#   set up platform and engine specific options and components
+#   ----------------------------------------------------------
 
 def setup_runtime(args):
 
     fmwork.banner('RUNTIME')
 
-    print('> setup_runtime: torch')
+    print('setup_runtime: torch')
 
-    if 'torch.call' in args.subs:
-        print(); print('\t', 'torch.call')
-        for key in args.subs['torch.call']:
-            val = args.subs['torch.call'][key]
-            print('\t\t', key, val)
+    print('\t', 'torch.call')
+    for key in args.subs['torch.call']:
+        val = args.subs['torch.call'][key]
+        print('\t\t', key, val)
+        s = f'torch.{key}({val})'
+        eval(s)
 
-    if 'torch.set' in args.subs:
-        print(); print('\t', 'torch.set')
-        for key in args.subs['torch.set']:
-            val = args.subs['torch.set'][key]
-            print('\t\t', key, val)
-
-    torch.set_grad_enabled(False) # disable gradient computation globally
+    print('\t', 'torch.set')
+    for key in args.subs['torch.set']:
+        val = args.subs['torch.set'][key]
+        print('\t\t', key, val)
+        s = f'torch.{key} = {val}'
+        exec(s)
 
     if args.platform == 'spyre': return setup_runtime_spyre(args)
 
 def setup_runtime_spyre(args):
 
-    print('> setup_runtime: spyre')
+    print('setup_runtime: spyre')
 
     print('\t', 'torch_sendnn')
     from torch_sendnn import torch_sendnn
@@ -113,6 +115,10 @@ def setup_model(args):
 
     print(model)
 
+#   -------------------------------
+#   set up input (prompt) generator
+#   -------------------------------
+
 #   --------------------------
 #   benchmark logic entrypoint
 #   --------------------------
@@ -124,17 +130,28 @@ def bench(args, model):
 
     for batch_size in batch_sizes:
         for input_size in input_sizes:
-            run(args, model, input_size, batch_size)
+            bench_one(args, model, input_size, batch_size)
 
-#   ---------------------------------
-#   run one combination of parameters
-#   ---------------------------------
-
-def run(args, model, input_size, batch_size):
+def bench_one(args, model, input_size, batch_size):
 
     fmwork.banner('RUN', input_size, batch_size)
 
-    print('hello')
+    for rep in range(args.reps):
+        dt = bench_one_rep(args, model, input_size, batch_size, rep)
+
+def bench_one_rep(args, model, input_size, batch_size, rep):
+
+    t0 = fmwork.time.get()
+    t1 = fmwork.time.get()
+    dt = fmwork.time.diff(t1, t0)
+
+    print(
+        'FMWORK REP',
+        rep + 1, args.reps,
+        fmwork.time.format(t0), fmwork.time.format(t1),
+        '%.9f' % (dt))
+
+    return dt
 
 #   ------------------
 #   program entrypoint
