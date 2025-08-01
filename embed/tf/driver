@@ -17,12 +17,15 @@ import transformers
 
 def main():
 
-    args  = setup_args()
-    setup_runtime(args)
-    model = setup_model(args)
-    gen   = setup_gen(args)
+    args = setup_args()
 
-    bench(args, model)
+    setup_runtime(args)
+
+    model = setup_model(args)
+
+    generator = setup_generator(args)
+
+    bench(args, model, generator)
 
 #   ---------------------------------------
 #   read and process command line arguments
@@ -47,6 +50,12 @@ def setup_args():
     fmwork.args.process_opts(args, opts, [
         'compile', 'model', 'torch.call', 'torch.set',
     ], globals())
+
+    args.model_path = (
+        os.path.join(args.model_root, args.model_name)
+        if args.model_root
+        else args.model_name
+    )
 
     fmwork.args.show(args)
 
@@ -93,17 +102,11 @@ def setup_model(args):
 
     fmwork.banner('MODEL')
 
-    model_path = (
-        os.path.join(args.model_root, args.model_name)
-        if args.model_root
-        else args.model_name
-    )
-
     model = getattr(
         transformers,
         args.model_class,
     ).from_pretrained(
-        model_path,
+        args.model_path,
         **args.subs['model'],
     )
 
@@ -115,43 +118,84 @@ def setup_model(args):
 
     print(model)
 
-#   -------------------------------
-#   set up input (prompt) generator
-#   -------------------------------
+    return model
+
+#   ----------------------
+#   set up input generator
+#   ----------------------
+
+def setup_generator(args):
+
+    generator = fmwork.gen.RandomGenerator(args.model_path)
+
+    return generator
 
 #   --------------------------
 #   benchmark logic entrypoint
 #   --------------------------
 
-def bench(args, model):
+def bench(args, model, generator):
 
     input_sizes = list(map(int, args.input_sizes.split(',')))
     batch_sizes = list(map(int, args.batch_sizes.split(',')))
 
     for batch_size in batch_sizes:
         for input_size in input_sizes:
-            bench_one(args, model, input_size, batch_size)
+            bench_one(args, model, generator, input_size, batch_size)
 
-def bench_one(args, model, input_size, batch_size):
+def bench_one(args, model, generator, input_size, batch_size):
 
     fmwork.banner('RUN', input_size, batch_size)
 
+    dts = []
     for rep in range(args.reps):
-        dt = bench_one_rep(args, model, input_size, batch_size, rep)
+        dt = bench_one_rep(args, model, generator, input_size, batch_size, rep)
+        dts.append(dt)
 
-def bench_one_rep(args, model, input_size, batch_size, rep):
+    show(args, model, input_size, batch_size, dts)
 
-    t0 = fmwork.time.get()
-    t1 = fmwork.time.get()
-    dt = fmwork.time.diff(t1, t0)
+def bench_one_rep(args, model, generator, input_size, batch_size, rep):
+
+    inputs = generator.prompt(input_size, batch_size, 'pt')
+
+    if args.platform != 'spyre':
+        inputs = inputs.to(args.platform)
+
+    t0 = fmwork.time_get()
+    model(**inputs)
+    if args.platform == 'cuda':
+        torch.cuda.synchronize()
+    t1 = fmwork.time_get()
+    dt = fmwork.time_diff(t1, t0)
 
     print(
         'FMWORK REP',
         rep + 1, args.reps,
-        fmwork.time.format(t0), fmwork.time.format(t1),
+        fmwork.time_format(t0), fmwork.time_format(t1),
         '%.9f' % (dt))
 
     return dt
+
+#   ------------------------
+#   process and show results
+#   ------------------------
+
+def show(args, model, input_size, batch_size, dts):
+
+    ign = 0.2
+    ign = int(max(ign * len(dts), 1))
+    rem = dts[ign:]
+    med = fmwork.med(rem)
+
+    print(); print(
+        'FMWORK RES',
+        '%s'   % (args.model_name),
+        '%s'   % (args.model_class),
+        '%d'   % (input_size),
+        '%d'   % (batch_size),
+        '%.3f' % (med * 1000.0), # ms/seq
+        '%.1f' % (batch_size / med), # seq/s
+    )
 
 #   ------------------
 #   program entrypoint
