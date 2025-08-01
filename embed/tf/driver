@@ -51,13 +51,13 @@ def setup_args():
         'compile', 'model', 'torch.call', 'torch.set',
     ], globals())
 
+    fmwork.args.show(args)
+
     args.model_path = (
         os.path.join(args.model_root, args.model_name)
         if args.model_root
         else args.model_name
     )
-
-    fmwork.args.show(args)
 
     return args
 
@@ -145,11 +145,12 @@ def bench(args, model, generator):
 
 def bench_combo(args, model, generator, input_size, batch_size):
 
-    fmwork.banner('RUN', input_size, batch_size)
+    fmwork.banner('RUN', input_size, '/', batch_size)
 
     ts = []; dts = []
     for rep in range(args.reps):
-        timings = bench_combo_rep(args, model, generator, input_size, batch_size, rep)
+        timings = bench_combo_rep(
+            args, model, generator, input_size, batch_size, rep)
         ts.extend(timings[:2])
         dts.append(timings[2])
 
