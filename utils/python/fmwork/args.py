@@ -99,7 +99,7 @@ def show(args):
             lst.append(f'--{key} {val}')
 
     for s in sorted(lst):
-        print(s)
+        print('FMWORK ARG', s)
 
     print()
 
