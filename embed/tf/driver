@@ -141,20 +141,21 @@ def bench(args, model, generator):
 
     for batch_size in batch_sizes:
         for input_size in input_sizes:
-            bench_one(args, model, generator, input_size, batch_size)
+            bench_combo(args, model, generator, input_size, batch_size)
 
-def bench_one(args, model, generator, input_size, batch_size):
+def bench_combo(args, model, generator, input_size, batch_size):
 
     fmwork.banner('RUN', input_size, batch_size)
 
-    dts = []
+    ts = []; dts = []
     for rep in range(args.reps):
-        dt = bench_one_rep(args, model, generator, input_size, batch_size, rep)
-        dts.append(dt)
+        timings = bench_combo_rep(args, model, generator, input_size, batch_size, rep)
+        ts.extend(timings[:2])
+        dts.append(timings[2])
 
-    show(args, model, input_size, batch_size, dts)
+    show(args, model, input_size, batch_size, ts, dts)
 
-def bench_one_rep(args, model, generator, input_size, batch_size, rep):
+def bench_combo_rep(args, model, generator, input_size, batch_size, rep):
 
     inputs = generator.prompt(input_size, batch_size, 'pt')
 
@@ -174,13 +175,13 @@ def bench_one_rep(args, model, generator, input_size, batch_size, rep):
         fmwork.time_format(t0), fmwork.time_format(t1),
         '%.9f' % (dt))
 
-    return dt
+    return t0, t1, dt
 
 #   ------------------------
 #   process and show results
 #   ------------------------
 
-def show(args, model, input_size, batch_size, dts):
+def show(args, model, input_size, batch_size, ts, dts):
 
     ign = 0.2
     ign = int(max(ign * len(dts), 1))
@@ -189,6 +190,8 @@ def show(args, model, input_size, batch_size, dts):
 
     print(); print(
         'FMWORK RES',
+        fmwork.time_format(ts[0]),
+        fmwork.time_format(ts[-1]),
         '%s'   % (args.model_name),
         '%s'   % (args.model_class),
         '%d'   % (input_size),
