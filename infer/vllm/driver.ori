@@ -120,9 +120,9 @@ def llm():
         enable_prefix_caching        = False,
         max_seq_len_to_capture       = par.max_seq_len_to_capture,
         disable_custom_all_reduce    = par.disable_custom_all_reduce,
-        # compilation_config = {
-        #     'cudagraph_capture_sizes': var.batch_sizes,
-        # },
+        compilation_config = {
+            'cudagraph_capture_sizes': var.batch_sizes,
+        },
     )
 
     t1 = fmwork.time_get()

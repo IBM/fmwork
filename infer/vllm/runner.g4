@@ -7,41 +7,30 @@ while [ -L "$SOURCE" ]; do
     [[ $SOURCE != /* ]] && SOURCE=$SDIR/$SOURCE; done
 SDIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
 
-if [[ ${#} -lt 21 ]]; then
+if [[ ${#} -lt 19 ]]; then
     if [[ "${1}" != "-h" && ${1} != "--help" ]]; then
-        echo
         echo "error: missing arguments"
     fi
 
-    echo    
-    echo "usage: $(basename ${0}) <driver> opts ..."
-    echo
-    echo "positional / required:"
-    echo "  driver      driver name"
-    echo
-    echo "positional with --"
-    echo "  --rdir      root output directory"
-    echo "  --mr        model root directory"
-    echo "  --mmtps     model names and associated tps"
-    echo "  --iis       input sizes  + mode (split|batch)"
-    echo "  --oos       output sizes + mode (split|batch)"
-    echo "  --bbs       batch sizes  + mode (split|batch)"
-    echo "  --devs      devsets (or 'auto')"
-    echo "  --sdir      suffix directory"
-    echo
+    echo "  rdir:   root output directory"
+    echo "  mr:     model root directory"
+    echo "  mmtps:  model names and associated tps"
+    echo "  iis:    input sizes  + mode (split|batch)"
+    echo "  oos:    output sizes + mode (split|batch)"
+    echo "  bbs:    batch sizes  + mode (split|batch)"
+    echo "  devs:   devsets (or 'auto')"
+    echo "  sdir:   suffix directory"
     exit 1
 fi
 
-driver=${1}; shift
-
-shift;   rdir=${1}; shift
-shift;     mr=${1}; shift
-shift;  mmtps=${1}; shift
-shift;    iis=${1}; shift; iis_mode=${1}; shift
-shift;    oos=${1}; shift; oos_mode=${1}; shift
-shift;    bbs=${1}; shift; bbs_mode=${1}; shift
-shift;   devs=${1}; shift
-shift;   sdir=${1}; shift
+shift;  rdir=${1}; shift
+shift;    mr=${1}; shift
+shift; mmtps=${1}; shift
+shift;   iis=${1}; shift; iis_mode=${1}; shift
+shift;   oos=${1}; shift; oos_mode=${1}; shift
+shift;   bbs=${1}; shift; bbs_mode=${1}; shift
+shift;  devs=${1}; shift
+shift;  sdir=${1}; shift
 
 if [[ ${iis_mode} == "split" ]]; then iis_for=${iis//,/ }; else iis_for=iis; fi
 if [[ ${oos_mode} == "split" ]]; then oos_for=${oos//,/ }; else oos_for=oos; fi
@@ -58,16 +47,15 @@ echo
 echo "${bdir}"
 echo
 
-echo "driver = ${driver}"             |& tee -a ${bdir}/params
-echo "rdir   = ${rdir}"               |& tee -a ${bdir}/params
-echo "mr     = ${mr}"                 |& tee -a ${bdir}/params
-echo "mmtps  = ${mmtps}"              |& tee -a ${bdir}/params
-echo "iis    = ${iis} ${iis_mode}"    |& tee -a ${bdir}/params
-echo "oos    = ${oos} ${oos_mode}"    |& tee -a ${bdir}/params
-echo "bbs    = ${bbs} ${bbs_mode}"    |& tee -a ${bdir}/params
-echo "devs   = ${devs}"               |& tee -a ${bdir}/params
-echo "sdir   = ${sdir}"               |& tee -a ${bdir}/params
-echo "@      = ${@}"                  |& tee -a ${bdir}/params
+echo "rdir = ${rdir}"               |& tee -a ${bdir}/params
+echo "mr   = ${mr}"                 |& tee -a ${bdir}/params
+echo "mms  = ${mms}"                |& tee -a ${bdir}/params
+echo "iis  = ${iis} ${iis_mode}"    |& tee -a ${bdir}/params
+echo "oos  = ${oos} ${oos_mode}"    |& tee -a ${bdir}/params
+echo "bbs  = ${bbs} ${bbs_mode}"    |& tee -a ${bdir}/params
+echo "devs = ${devs}"               |& tee -a ${bdir}/params
+echo "sdir = ${sdir}"               |& tee -a ${bdir}/params
+echo "@    = ${@}"                  |& tee -a ${bdir}/params
 echo
 
 if [[ ${devs} == auto ]]; then
@@ -82,6 +70,7 @@ else
     tp_8=$(echo ${devs} | cut -d / -f 4)
 fi
 
+for M in 128; do
 for mmtp in ${mmtps//,/ } ; do
 for ii   in ${iis_for}    ; do
 for oo   in ${oos_for}    ; do
@@ -95,7 +84,6 @@ if [[ -z "${devsets}" ]]; then continue; fi
 
 etim="$(date +%Y%m%d-%H%M%S.%N)"
 edir="${bdir}/${etim}"
-edir+="/${driver}"
 edir+="/${mm}"
 edir+="/${tp}"
 edir+="/${ii}"
@@ -151,13 +139,14 @@ if [[ ${oos_mode} == "split" ]]; then oos_driver=${oo}; else oos_driver=${oos}; 
 if [[ ${bbs_mode} == "split" ]]; then bbs_driver=${bb}; else bbs_driver=${bbs}; fi
 
 cmd="
-${SDIR}/${driver}
+${SDIR}/driver
     --id ${btim}/${etim}
     -m   ${mr}/${mm}
     -i   ${iis_driver}
     -o   ${oos_driver}
     -b   ${bbs_driver}
     -t   ${tp}
+    -M   ${M}
     ${@}
 "
 
@@ -165,8 +154,6 @@ function run {
     export PYTHONUNBUFFERED=1
     export CUDA_DEVICE_ORDER=PCI_BUS_ID
     export CUDA_VISIBLE_DEVICES=${devset}
-    export TORCHINDUCTOR_CACHE_DIR=${edir}/torch_compile_cache
-
     env         &> ${edir}/utils/env
     pip list    &> ${edir}/utils/pip-list
     echo ${cmd}  > ${edir}/exp.cmd
@@ -187,7 +174,7 @@ run & # &> ${edir}/exp.log &
 
 sleep 1
 
-done; done; done; done
+done; done; done; done; done
 
 wait
 

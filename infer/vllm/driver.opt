@@ -52,6 +52,7 @@ def params():
     parser.add(      '--distributed_executor_backend', default='mp')
     parser.add('-M', '--max_num_seqs', type=int, default=512)
     parser.add('-L', '--max_model_len', type=int)
+    parser.add('-B', '--max_num_batched_tokens', type=int)
     parser.add('-c', '--max_seq_len_to_capture', type=int)
     parser.add('-C', '--enable_chunked_prefill',type=str)
     parser.add('--id', type=str)
@@ -115,14 +116,15 @@ def llm():
         use_v2_block_manager         = par.use_v2_block_manager,
         distributed_executor_backend = par.distributed_executor_backend,
         max_num_seqs                 = par.max_num_seqs,
+        max_num_batched_tokens       = par.max_num_batched_tokens,
         enable_chunked_prefill       = par.enable_chunked_prefill,
         swap_space                   = par.swap_space,
         enable_prefix_caching        = False,
         max_seq_len_to_capture       = par.max_seq_len_to_capture,
         disable_custom_all_reduce    = par.disable_custom_all_reduce,
-        # compilation_config = {
-        #     'cudagraph_capture_sizes': var.batch_sizes,
-        # },
+        compilation_config = {
+            'cudagraph_capture_sizes': var.batch_sizes,
+        },
     )
 
     t1 = fmwork.time_get()

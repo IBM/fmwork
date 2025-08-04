@@ -31,38 +31,53 @@ def params():
     fmwork.banner('PARAMS')
 
     parser = argparse.ArgumentParser()
-    parser.add = parser.add_argument
 
-    parser.add('-m', '--model_path', type=str, required=True)
-    parser.add(      '--dataset_format', type=str, default='json', choices=['json', 'processed'])
-    parser.add(      '--dataset_path', type=str)
-    parser.add(      '--dataset_mode', type=str, default='expand', choices=['expand', 'real'])
-    parser.add('-i', '--input_size', type=str, required=True)
-    parser.add('-o', '--output_size', type=str, required=True)
-    parser.add('-b', '--batch_size', type=str, required=True)
-    parser.add('-t', '--tensor_parallel', type=int, required=True)
-    parser.add('-r', '--reps', type=int, default=3)
-    parser.add('-d', '--dtype', type=str, default='auto')
-    parser.add('-q', '--quantization', type=str, default=None)
-    parser.add('-k', '--kv_cache_dtype', type=str, default='auto')
-    parser.add('-u', '--gpu_memory_utilization', type=float, default=0.95)
-    parser.add('-e', '--enforce_eager', action='store_true')
-    parser.add('-s', '--num_scheduler_steps', type=int, default=1)
-    parser.add(      '--use_v2_block_manager', action='store_true')
-    parser.add(      '--distributed_executor_backend', default='mp')
-    parser.add('-M', '--max_num_seqs', type=int, default=512)
-    parser.add('-L', '--max_model_len', type=int)
-    parser.add('-c', '--max_seq_len_to_capture', type=int)
-    parser.add('-C', '--enable_chunked_prefill',type=str)
-    parser.add('--id', type=str)
-    parser.add('--show_reps', action='store_true')
-    parser.add('--ignore_eos', type=str, default='True')
-    parser.add('--debug_outputs', action='store_true')
-    parser.add('--trace_outputs', action='store_true')
-    parser.add('--stop_itl', type=float)
-    parser.add('--stop_ttft', type=float)
-    parser.add('--swap_space', type=int, default=4)
-    parser.add('--disable_custom_all_reduce', action='store_true')
+    parser.add_argument('-m', '--model_path',
+        type=str, required=True)
+    parser.add_argument(      '--dataset_format',
+        type=str, default='json', choices=['json', 'processed'])
+    parser.add_argument(      '--dataset_path',
+        type=str)
+    parser.add_argument(      '--dataset_mode',
+        type=str, default='expand', choices=['expand', 'real'])
+    parser.add_argument('-i', '--input_size',
+        type=str, required=True)
+    parser.add_argument('-o', '--output_size',
+        type=str, required=True)
+    parser.add_argument('-b', '--batch_size',
+        type=str, required=True)
+    parser.add_argument('-t', '--tensor_parallel',
+        type=int, required=True)
+    parser.add_argument('-r', '--reps',
+        type=int, default=3)
+    parser.add_argument('-d', '--dtype',
+        type=str, default='auto')
+    parser.add_argument('-q', '--quantization',
+        type=str, default=None)
+    parser.add_argument('-k', '--kv_cache_dtype',
+        type=str, default='auto')
+    parser.add_argument('-u', '--gpu_memory_utilization',
+        type=float, default=0.95)
+    parser.add_argument('-e', '--enforce_eager',
+        action='store_true')
+    parser.add_argument('-s', '--num_scheduler_steps',
+        type=int, default=1)
+    parser.add_argument(      '--use_v2_block_manager',
+        action='store_true')
+    parser.add_argument(      '--distributed_executor_backend',
+        default='mp')
+    parser.add_argument('-M', '--max_num_seqs',
+        type=int, default=512)
+    parser.add_argument('-C', '--enable_chunked_prefill',
+        type=str)
+    parser.add_argument('--id', type=str)
+    parser.add_argument('--show_reps', action='store_true')
+    parser.add_argument('--ignore_eos', type=str, default='True')
+    parser.add_argument('--debug_outputs', action='store_true')
+    parser.add_argument('--trace_outputs', action='store_true')
+    parser.add_argument('--stop_itl', type=float)
+    parser.add_argument('--stop_ttft', type=float)
+    parser.add_argument('--swap_space', type=int, default=4)
 
     parser.parse_args(namespace=par)
 
@@ -89,12 +104,6 @@ def params():
     par.ignore_eos = par.ignore_eos == 'True' or \
         par.ignore_eos == '1'
 
-    if not par.max_seq_len_to_capture:
-        par.max_seq_len_to_capture = max(var.input_sizes) + max(var.output_sizes)
-
-    if not par.max_model_len:
-        par.max_model_len = max(var.input_sizes) + max(var.output_sizes)
-
 def llm():
 
     fmwork.banner('LLM')
@@ -106,7 +115,7 @@ def llm():
         enforce_eager                = par.enforce_eager,
         gpu_memory_utilization       = par.gpu_memory_utilization,
         kv_cache_dtype               = par.kv_cache_dtype,
-        max_model_len                = par.max_model_len,
+        max_model_len                = max(var.input_sizes) + max(var.output_sizes),
         model                        = par.model_path,
         quantization                 = par.quantization,
         tensor_parallel_size         = par.tensor_parallel,
@@ -118,8 +127,6 @@ def llm():
         enable_chunked_prefill       = par.enable_chunked_prefill,
         swap_space                   = par.swap_space,
         enable_prefix_caching        = False,
-        max_seq_len_to_capture       = par.max_seq_len_to_capture,
-        disable_custom_all_reduce    = par.disable_custom_all_reduce,
         # compilation_config = {
         #     'cudagraph_capture_sizes': var.batch_sizes,
         # },
@@ -140,7 +147,7 @@ def runs():
                 etim, med, madp = run(input_size, output_size, batch_size)
 
                 if output_size == 1:
-                    if input_size not in oo1:
+                    if input_size not in oo1: 
                         oo1[input_size] = {}
                         oor[input_size] = {}
                     oo1[input_size][batch_size] = med
