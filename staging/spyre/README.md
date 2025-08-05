@@ -101,7 +101,7 @@ COLL_ALLREDUCE_ALGO:             None
 
 ### 7. Convert logs to JSON payloads json (for database)
 
-Assume we ran with `vLLM=v1`, the command is: 
+Assume we ran inference with `vLLM=v1` and captured benchmark logs as `exp.log` files, e.g.:
 
 **Note**: `v1/<model_name>/<precision>` is required in the structure for the following parsing steps.
 ````
@@ -115,29 +115,29 @@ cd transformer-ft-eval
 export IMAGE_URL=<image url>
 python gen_metadata.py
 ```
-To generate payloads in json from logs from fmwork:
+To generate a JSON file from all logs under a specified folder (automatically finding all `exp.log` files recursively):
 ```
-python jsonfy-metadataid.py \
-  --path <output_path>/v1 \
-  --output <output_json_file> \
+find <path to the folder>/ -name exp.log | xargs python jsonfy-metadataid.py \
   --metadata_id <your_metadata_id> \
-  --model ibm-granite/granite-3.3-8b-instruct
+  --model ibm-granite/granite-3.3-8b-instruct \
+  --precision bf16 \
+  --output <output_json_file>
 ```
 
 * `--path`: Root directory containing model/precision folders with FMWORK logs.
 
-* `--output`: Path to save the final JSON file.
+
 
 * `--metadata_id`: generated as the above.
-
-* `--model`: Hugging Face model ID (e.g., ibm-granite/granite-3.3-8b-instruct).
-If provided, this will override the default model name parsed from the folder structure, and will be used as the "model" field in the output JSON.
-
-* `--opts` (optional): Custom configuration string. If present, it will be appended to system settings parsed from the logs (under `Settings for Spyre`).
+* `--model`: Required. Hugging Face model ID.
+* `--precision`: Required. Model precision (e.g., bf16, fp16, fp8).
+* `--output`: Path to save the final JSON file.
+* `--opts` (optional): Custom configuration string. If present, it will be appended to system settings parsed from the logs (under `Settings for Spyre`). 
+* `--debug` (optional): Print parsed results for inspection.
 
 **Note**: 
 * The value of the "model" field in the JSON payload must be a **standard Hugging Face model ID**, as required by the metadata database schema.
-* If `Settings for Spyre` is found in the logs, it will be parsed into `opts` automatically. The `--opts` string will be appended to those values.
+* If `Settings for Spyre` is found in the logs, it will be parsed into `opts` automatically. The `--opts` string will be appended to those values. `opts` is now stored as a list of strings.
 
 Example command to upload:
 ```
