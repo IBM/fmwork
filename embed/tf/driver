@@ -46,18 +46,23 @@ def setup_args():
     parser.add('--input_sizes', type=str, required=True)
     parser.add('--batch_sizes', type=str, required=True)
     parser.add('--reps',        type=int, required=True)
-    args, opts = parser.parse_known_args()
-    fmwork.args.process_opts(args, opts, [
-        'compile', 'model', 'torch.call', 'torch.set',
-    ], globals())
 
-    fmwork.args.show(args)
+    args, opts = parser.parse_known_args()
 
     args.model_path = (
         os.path.join(args.model_root, args.model_name)
         if args.model_root
         else args.model_name
     )
+
+    args.input_sizes = list(map(int, args.input_sizes.split(',')))
+    args.batch_sizes = list(map(int, args.batch_sizes.split(',')))
+
+    fmwork.args.process_opts(args, opts, [
+        'compile', 'model', 'torch.call', 'torch.set',
+    ], {**globals(), **locals()})
+
+    fmwork.args.show(args)
 
     return args
 
@@ -136,11 +141,8 @@ def setup_generator(args):
 
 def bench(args, model, generator):
 
-    input_sizes = list(map(int, args.input_sizes.split(',')))
-    batch_sizes = list(map(int, args.batch_sizes.split(',')))
-
-    for batch_size in batch_sizes:
-        for input_size in input_sizes:
+    for batch_size in args.batch_sizes:
+        for input_size in args.input_sizes:
             bench_combo(args, model, generator, input_size, batch_size)
 
 def bench_combo(args, model, generator, input_size, batch_size):
