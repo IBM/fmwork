@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+sys.path.insert(0, os.path.join(
+    os.path.dirname(__file__), '../../utils/python'))
+import fmwork
+
+import argparse
+import torch
+import vllm
+
+#   -------------
+#   main function
+#   -------------
+
+def main():
+
+    args = setup_args()
+
+    setup_runtime(args)
+
+    engine = setup_engine(args)
+
+    generator = setup_generator(args)
+
+    bench(args, engine, generator)
+
+#   ---------------------------------------
+#   read and process command line arguments
+#   ---------------------------------------
+
+def setup_args():
+
+    fmwork.banner('ARGS')
+
+    parser = argparse.ArgumentParser()
+    parser.add = parser.add_argument
+    parser.add('--platform',     type=str, required=True)
+    parser.add('--model_root',   type=str)
+    parser.add('--model_name',   type=str, required=True)
+    parser.add('--input_sizes',  type=str, required=True)
+    parser.add('--output_sizes', type=str, required=True)
+    parser.add('--batch_sizes',  type=str, required=True)
+    parser.add('--tp_size',      type=int, required=True)
+    parser.add('--reps',         type=int, required=True)
+    args, opts = parser.parse_known_args()
+
+    args.model_path = (
+        os.path.join(args.model_root, args.model_name)
+        if args.model_root
+        else args.model_name
+    )
+
+    args.input_sizes  = list(map(int, args.input_sizes.split(',')))
+    args.output_sizes = list(map(int, args.output_sizes.split(',')))
+    args.batch_sizes  = list(map(int, args.batch_sizes.split(',')))
+
+    fmwork.args.process_opts(args, opts, [
+        'engine', 'sampling',
+    ], {**globals(), **locals()})
+
+    fmwork.args.show(args)
+
+    return args
+
+#   ----------------------------------------------------------
+#   set up platform and engine specific options and components
+#   ----------------------------------------------------------
+
+def setup_runtime(args):
+
+    fmwork.banner('RUNTIME')
+
+    if args.platform == 'spyre': return setup_runtime_spyre(args)
+
+    print('Nothing to do.')
+
+def setup_runtime_spyre(args):
+
+    print('setup_runtime: spyre')
+
+    os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = str(max(args.input_sizes))
+    os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"]  = str(max(args.output_sizes))
+    os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = str(max(args.batch_sizes))
+
+#   ------------
+#   setup engine
+#   ------------
+
+def setup_engine(args):
+
+    fmwork.banner('ENGINE')
+
+    engine = vllm.LLM(
+        model = args.model_path,
+        tensor_parallel_size = args.tp_size,
+        **args.subs['engine'],
+    )
+
+    return engine
+
+#   ----------------------
+#   set up input generator
+#   ----------------------
+
+def setup_generator(args):
+
+    generator = fmwork.gen.RandomGenerator(args.model_path)
+
+    return generator
+
+#   --------------------------
+#   benchmark logic entrypoint
+#   --------------------------
+
+def bench(
+    args,
+    engine, generator,
+):
+    all_ts   = {}
+    all_dts  = {}
+    all_meds = {}
+    all_mads = {}
+
+    for input_size in args.input_sizes:
+        for output_size in args.output_sizes:
+            for batch_size in args.batch_sizes:
+
+                bench_combo(
+                    args,
+                    engine, generator,
+                    input_size, output_size, batch_size,
+                    all_ts, all_dts)
+
+                show(
+                    args,
+                    engine,
+                    input_size, output_size, batch_size,
+                    all_ts, all_dts,
+                    all_meds, all_mads)
+
+def bench_combo(
+    args,
+    engine, generator,
+    input_size, output_size, batch_size,
+    all_ts, all_dts,
+):
+    fmwork.banner('RUN', input_size, '/', output_size, '/', batch_size)
+
+    ts  = []
+    dts = []
+
+    for rep in range(args.reps):
+
+        timings = bench_combo_rep(
+            args,
+            engine, generator,
+            input_size, output_size, batch_size,
+            rep)
+
+        ts.extend(timings[:2])
+        dts.append(timings[2])
+
+    iob = (input_size, output_size, batch_size)
+
+    all_ts[iob]  = ts
+    all_dts[iob] = dts
+
+def bench_combo_rep(
+    args,
+    engine, generator,
+    input_size, output_size, batch_size,
+    rep,
+):
+    inputs = generator.prompt(input_size, batch_size, 'np')
+
+    sampling_params = vllm.SamplingParams(
+        min_tokens = output_size,
+        max_tokens = output_size,
+        **args.subs['sampling'],
+    )
+
+    kwargs = {
+        'prompt_token_ids' : inputs,
+        'sampling_params'  : sampling_params,
+        'use_tqdm'         : False,
+    }
+
+    t0 = fmwork.time_get()
+
+    outputs = engine.generate(**kwargs)
+
+    if args.platform == 'cuda':
+        torch.cuda.synchronize()
+
+    t1 = fmwork.time_get()
+
+    dt = fmwork.time_diff(t1, t0)
+
+    print(
+        'FMWORK REP',
+        rep + 1, args.reps,
+        fmwork.time_format(t0), fmwork.time_format(t1),
+        args.model_name, input_size, output_size, batch_size, args.tp_size,
+        '%.9f' % (dt),
+        '%.3f' % (1000.0 * dt / output_size),
+        '%.1f' % (batch_size * output_size / dt))
+
+    return t0, t1, dt
+
+#   ------------------------
+#   process and show results
+#   ------------------------
+
+def show(
+    args,
+    model,
+    input_size, output_size, batch_size,
+    all_ts, all_dts,
+    all_meds, all_mads,
+):
+    iob = (input_size, output_size, batch_size)
+    ts  = all_ts[iob]
+    dts = all_dts[iob]
+
+    ign = 0.2
+    ign = int(max(ign * len(dts), 1))
+    rem = dts[ign:]
+    med = fmwork.med(rem)
+    mad = fmwork.mad(rem) / med
+    itl = 1000.0 * med / output_size
+    thp = batch_size * output_size / med
+
+    all_meds[iob] = med
+    all_mads[iob] = mad
+
+    print()
+    print('Timestamp start               =', fmwork.time_format(ts[0]))
+    print('Timestamp end                 =', fmwork.time_format(ts[-1]))
+    print('Model name                    =', args.model_name)
+    print('Input size                    =', input_size)
+    print('Output size                   =', output_size)
+    print('Batch size                    =', batch_size)
+    print('Tensor parallel size          =', args.tp_size)
+    print('Relative med. abs. dev.       =', '%.3f' % (mad))
+    print('RES: Inference time (s)       =', '%.3f' % (med))
+    print('RES: Inter-token latency (ms) =', '%.3f' % (itl))
+    print('RES: Throughput (tok/s)       =', '%.1f' % (thp))
+
+    print(); print(
+        'FMWORK RES',
+        fmwork.time_format(ts[0]),
+        fmwork.time_format(ts[-1]),
+        '%s'   % (args.model_name),
+        '%d'   % (input_size),
+        '%d'   % (output_size),
+        '%d'   % (batch_size),
+        '%d'   % (args.tp_size),
+        '%.3f' % (mad),
+        '%.3f' % (med),
+        '%.3f' % (itl),
+        '%.1f' % (thp),
+    )
+
+    if output_size == 1: return
+
+    i1b = (input_size, 1, batch_size)
+
+    if i1b not in all_ts   or \
+       i1b not in all_dts  or \
+       i1b not in all_meds or \
+       i1b not in all_mads:
+
+        return
+
+    ttft   = all_meds[i1b]
+    ttft_r = all_mads[i1b]
+    inf    = all_meds[iob]
+    inf_r  = all_mads[iob]
+    gen    = inf - ttft
+    itl    = 1000.0 * gen / output_size
+    thp    = batch_size * output_size / gen
+
+    print()
+    print('Timestamp start                        =', fmwork.time_format(ts[0]))
+    print('Timestamp end                          =', fmwork.time_format(ts[-1]))
+    print('Model name                             =', args.model_name)
+    print('Input size                             =', input_size)
+    print('Output size                            =', output_size)
+    print('Batch size                             =', batch_size)
+    print('Tensor parallel size                   =', args.tp_size)
+    print('Relative med. abs. dev. TTFT           =', '%.3f' % (ttft_r))
+    print('Relative med. abs. dev. INF            =', '%.3f' % (inf_r))
+    print('GEN: [ INF  ] Inference time (s)       =', '%.3f' % (inf))
+    print('GEN: [ GEN  ] Generation time (s)      =', '%.3f' % (gen))
+    print('GEN: [ TTFT ] Time to first token (s)  =', '%.3f' % (ttft))
+    print('GEN: [ ITL  ] Inter-token latency (ms) =', '%.3f' % (itl))
+    print('GEN: [ THP  ] Throughput (tok/s)       =', '%.1f' % (thp))
+
+    print(); print(
+        'FMWORK GEN',
+        fmwork.time_format(ts[0]),
+        fmwork.time_format(ts[-1]),
+        '%s'   % (args.model_name),
+        '%d'   % (input_size),
+        '%d'   % (output_size),
+        '%d'   % (batch_size),
+        '%d'   % (args.tp_size),
+        '%.3f' % (ttft_r),
+        '%.3f' % (inf_r),
+        '%.3f' % (inf),
+        '%.3f' % (gen),
+        '%.3f' % (ttft),
+        '%.3f' % (itl),
+        '%.1f' % (thp),
+    )
+
+#   ------------------
+#   program entrypoint
+#   ------------------
+
+if __name__ == '__main__':
+    main(); print()
+
