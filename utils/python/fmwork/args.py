@@ -3,13 +3,13 @@ import json
 import shlex
 import yaml
 
-def process_opts(args, opts, sublist, globals_dict):
+def process_opts(args, opts, sublist, namespace):
 
     subs = {}
 
     i = 0
     while i < len(opts):
-        process_opt(globals_dict, subs, opts, i)
+        process_opt(namespace, subs, opts, i)
         i += 2
 
     for key in subs:
@@ -25,7 +25,7 @@ def process_opts(args, opts, sublist, globals_dict):
     args.subs    = subs
     args.sublist = sublist
 
-def process_opt(globals_dict, subs, opts, i):
+def process_opt(namespace, subs, opts, i):
 
     key = opts[i] # get key
 
@@ -67,7 +67,7 @@ def process_opt(globals_dict, subs, opts, i):
 
     val = opts[i+1]
     if is_eval:
-        val = eval(val, globals_dict)
+        val = eval(val, namespace)
 
     # dig into dict
 
