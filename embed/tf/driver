@@ -107,6 +107,8 @@ def setup_model(args):
 
     fmwork.banner('MODEL')
 
+    t0 = fmwork.time_get()
+
     model = getattr(
         transformers,
         args.model_class,
@@ -121,7 +123,11 @@ def setup_model(args):
     if args.compile: model = torch.compile(model, **args.subs['compile'])
     if args.eval:    model.eval()
 
+    t1 = fmwork.time_get()
+
     print(model)
+
+    print(); print('FMWORK SETUP', '%.6f' % (fmwork.time_diff(t1, t0)))
 
     return model
 

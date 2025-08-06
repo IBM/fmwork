@@ -92,11 +92,17 @@ def setup_engine(args):
 
     fmwork.banner('ENGINE')
 
+    t0 = fmwork.time_get()
+
     engine = vllm.LLM(
         model = args.model_path,
         tensor_parallel_size = args.tp_size,
         **args.subs['engine'],
     )
+
+    t1 = fmwork.time_get()
+
+    print(); print('FMWORK SETUP', '%.6f' % (fmwork.time_diff(t1, t0)))
 
     return engine
 
