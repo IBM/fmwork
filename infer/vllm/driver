@@ -36,14 +36,15 @@ def setup_args():
 
     parser = argparse.ArgumentParser()
     parser.add = parser.add_argument
-    parser.add('--platform',     type=str, required=True)
-    parser.add('--model_root',   type=str)
-    parser.add('--model_name',   type=str, required=True)
-    parser.add('--input_sizes',  type=str, required=True)
-    parser.add('--output_sizes', type=str, required=True)
-    parser.add('--batch_sizes',  type=str, required=True)
-    parser.add('--tp_size',      type=int, required=True)
-    parser.add('--reps',         type=int, required=True)
+    parser.add('--platform',         type=str, required=True)
+    parser.add('--model_root',       type=str)
+    parser.add('--model_name',       type=str, required=True)
+    parser.add('--input_sizes',      type=str, required=True)
+    parser.add('--output_sizes',     type=str, required=True)
+    parser.add('--batch_sizes',      type=str, required=True)
+    parser.add('--batch_multiplier', type=int, default=1)
+    parser.add('--tp_size',          type=int, required=True)
+    parser.add('--reps',             type=int, required=True)
     args, opts = parser.parse_known_args()
 
     args.model_path = (
@@ -179,7 +180,11 @@ def bench_combo_rep(
     input_size, output_size, batch_size,
     rep,
 ):
-    inputs = generator.prompt(input_size, batch_size, 'np')
+    inputs = generator.prompt(
+        input_size,
+        batch_size * args.batch_multiplier,
+        'np',
+    )
 
     sampling_params = vllm.SamplingParams(
         min_tokens = output_size,
@@ -235,6 +240,7 @@ def show(
     rem = dts[ign:]
     med = fmwork.med(rem)
     mad = fmwork.mad(rem) / med
+    med = med / args.batch_multiplier
     itl = 1000.0 * med / output_size
     thp = batch_size * output_size / med
 
@@ -248,6 +254,7 @@ def show(
     print('Input size                    =', input_size)
     print('Output size                   =', output_size)
     print('Batch size                    =', batch_size)
+    print('Batch size multiplier         =', args.batch_multiplier)
     print('Tensor parallel size          =', args.tp_size)
     print('Relative med. abs. dev.       =', '%.3f' % (mad))
     print('RES: Inference time (s)       =', '%.3f' % (med))
@@ -295,6 +302,7 @@ def show(
     print('Input size                             =', input_size)
     print('Output size                            =', output_size)
     print('Batch size                             =', batch_size)
+    print('Batch size multiplier                  =', args.batch_multiplier)
     print('Tensor parallel size                   =', args.tp_size)
     print('Relative med. abs. dev. TTFT           =', '%.3f' % (ttft_r))
     print('Relative med. abs. dev. INF            =', '%.3f' % (inf_r))
