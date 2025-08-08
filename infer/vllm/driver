@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 
-import os
-import sys
-sys.path.insert(0, os.path.join(
-    os.path.dirname(__file__), '../../utils/python'))
-import fmwork
-
 import argparse
+import fmwork
+import os
 import torch
 import vllm
 
@@ -57,11 +53,11 @@ def setup_args():
     args.output_sizes = list(map(int, args.output_sizes.split(',')))
     args.batch_sizes  = list(map(int, args.batch_sizes.split(',')))
 
-    fmwork.args.process_opts(args, opts, [
+    fmwork.args_process_opts(args, opts, [
         'engine', 'sampling',
     ], {**globals(), **locals()})
 
-    fmwork.args.show(args)
+    fmwork.args_show(args)
 
     return args
 
@@ -113,7 +109,7 @@ def setup_engine(args):
 
 def setup_generator(args):
 
-    generator = fmwork.gen.RandomGenerator(args.model_path)
+    generator = fmwork.RandomGenerator(args.model_path)
 
     return generator
 
