@@ -1,0 +1,153 @@
+#!/bin/bash
+
+# set -o errexit
+# set -o nounset
+# set -o pipefail
+
+SOURCE=${BASH_SOURCE[0]}
+while [ -h "$SOURCE" ]; do
+  DIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
+  SOURCE=$(readlink "$SOURCE")
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SDIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
+
+# ==============================================================================
+#                                                                      ARGUMENTS
+# ==============================================================================
+
+function arg_invalid { echo "error: invalid argument: '${1}'" ; exit 1 ; }
+function arg_missing { echo "error: missing argument: '${1}'" ; exit 1 ; }
+
+function usage {
+    echo
+    echo "usage: $(basename ${0}) required... [optional]..."
+    echo
+    echo "required:"
+    echo "  -W | --dir_work"
+    echo "      Working directory / path."
+    echo "      This is where the experiment is executed from,"
+    echo "      including where working files (e.g., compile artifacts)"
+    echo "      are written to / loaded from."
+    echo
+    echo "optional:"
+    echo "  -O | --dir_outs"
+    echo "      Output path. If not set, defaults to working directory."
+    echo "  -P | --dir_pref"
+    echo "      Prefix (name/path) to be added to working directory."
+    echo "      Also added to the outputs directory, if different."
+    echo "      Prefix is added before the experiment timestamp."
+    echo "      Useful for grouping a sweep of experiments together."
+    echo "  -T | --exp_time"
+    echo "      Experiment timestamp."
+    echo "      Used in combination with other pieces of information"
+    echo "      to uniquely identify the experiment."
+    echo "      If not provided, a timestamp will be generated."
+    echo
+    exit 1
+}
+
+while [[ ${#} -gt 0 ]]; do
+    arg=${1}; case ${arg} in
+        -W | --dir_work ) shift; dir_work=${1}      ;;
+        -O | --dir_outs ) shift; dir_outs=${1}      ;;
+        -P | --dir_pref ) shift; dir_pref=${1}      ;;
+        -T | --exp_time ) shift; exp_time=${1}      ;;
+        -m | --model    ) shift; model=${1}         ;;
+        -h | --help     ) shift; usage              ;;
+        --              ) shift; rem=${@}; break    ;;
+         *              ) shift; arg_invalid ${arg} ;;
+    esac; shift
+done
+
+for arg in \
+    dir_work \
+; do
+    if [[ -z "${!arg:-}" ]]; then arg_missing --${arg}; fi
+done
+
+server=${rem%% -- *}
+client=${rem#* -- }
+
+# handle default values
+# ---------------------
+
+dir_outs=${dir_outs:-${dir_work}}
+dir_pref=${dir_pref:-}
+exp_time=${exp_time:-$(date +%Y%m%d-%H%M%S.%N)}
+
+# ==============================================================================
+#                                                                          SETUP
+# ==============================================================================
+
+wdir=${dir_work}/${dir_pref}/${exp_time}
+odir=${dir_outs}/${dir_pref}/${exp_time}
+
+mkdir -p ${wdir}
+mkdir -p ${odir}
+
+echo
+echo "(runner) dir_work = ${dir_work}"
+echo "(runner) dir_outs = ${dir_outs}"
+echo "(runner) dir_pref = ${dir_pref}"
+echo "(runner) exp_time = ${exp_time}"
+echo "(runner) wdir     = ${wdir}"
+echo "(runner) odir     = ${odir}"
+
+# ==============================================================================
+#                                                                            RUN
+# ==============================================================================
+
+cd ${wdir}
+
+cmd="${SDIR}/${server} --model ${model}"
+
+echo ${cmd} &> ${odir}/server.cmd
+eval ${cmd} &> ${odir}/server.log &
+
+server_pid=${!}
+
+sleep 1
+
+echo
+echo -n "waiting for server ... "
+
+while :; do
+    if ! kill -0 ${server_pid} 2>/dev/null; then
+        echo
+        echo "error: server died prematurely"
+        exit 1
+    elif grep -q "Started server process"           ${odir}/server.log && \
+         grep -q "Waiting for application startup." ${odir}/server.log && \
+         grep -q "Application startup complete."    ${odir}/server.log
+    then
+        break
+    fi
+    sleep 1
+done
+
+echo "done, server is ready!"
+
+cmd="${SDIR}/${client} --model ${model}"
+
+echo
+echo ${cmd}     &> ${odir}/client.cmd
+eval ${cmd} |& tee ${odir}/client.log
+
+sleep 1
+
+curl -s http://localhost:8000/metrics | grep -v "^#" &> ${odir}/metrics.log
+
+sleep 1
+
+echo                          >> ${odir}/server.log
+echo "terminating server ..." >> ${odir}/server.log
+
+kill -2 ${server_pid}
+
+# ==============================================================================
+#                                                                           DONE
+# ==============================================================================
+
+echo
+

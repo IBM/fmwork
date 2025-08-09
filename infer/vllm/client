@@ -1,0 +1,41 @@
+#!/bin/bash
+
+envs=()
+args=()
+
+function echoval {
+    echo "${@}"
+    eval ${@}
+}
+
+while [[ ${#} -gt 0 ]]; do
+    arg=${1}; case ${arg} in
+        -m | --model ) shift; model=${1}     ;;
+        -e | --env   ) shift; envs+=("${1}") ;;
+         *           )        args+=("${1}") ;;
+    esac; shift
+done
+
+echo
+
+for keyval in ${envs[@]}; do
+    key=${keyval%%=*}
+    val=${keyval#*=}
+
+    if [[ ${val} == __UNSET__ ]]; then echoval "unset  ${key}"
+    else                               echoval "export ${key}=${val}"
+    fi
+done
+
+cmd="
+vllm bench serve
+    --base-url http://0.0.0.0:8000
+    --model ${model}
+    ${args[*]}
+"
+
+echo
+echo ${cmd}
+echo
+eval ${cmd}
+
