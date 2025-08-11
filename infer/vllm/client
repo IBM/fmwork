@@ -35,6 +35,8 @@ vllm bench serve
 "
 
 echo
+env | sed 's/^/FMWORK ENV /'
+echo
 echo ${cmd}
 echo
 eval ${cmd}
