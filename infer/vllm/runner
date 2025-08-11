@@ -110,12 +110,18 @@ server_pid=${!}
 sleep 1
 
 echo
-echo -n "waiting for server ... "
+echo -n "waiting for server at PID ${server_pid} ... "
 
 while :; do
     if ! kill -0 ${server_pid} 2>/dev/null; then
         echo
         echo "error: server died prematurely"
+        exit 1
+    elif grep -q "Exiting after fatal event"        ${odir}/server.log && \
+         grep -q "Fatal type:  SIGABRT"             ${odir}/server.log
+    then
+        echo
+        echo "error: SIGABRT event at server"
         exit 1
     elif grep -q "Started server process"           ${odir}/server.log && \
          grep -q "Waiting for application startup." ${odir}/server.log && \
