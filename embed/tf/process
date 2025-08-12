@@ -21,6 +21,10 @@ def main():
 
             opts.append(line.strip()[11:])
 
+        if line.startswith('FMWORK SETUP'):
+
+            setup = float(line.strip().split(' ')[-1])
+
         if line.startswith('FMWORK RES'):
 
             split = line.strip().split(' ')
@@ -46,7 +50,7 @@ def main():
                 'tp'            : 1,
                 'opts'          : opts,
                 'warmup'        : None,
-                'setup'         : None,
+                'setup'         : setup,
                 'ttft'          : None,
                 'itl'           : latency,
                 'thp'           : throughput,
