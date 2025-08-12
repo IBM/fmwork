@@ -24,6 +24,9 @@ function usage {
     echo "usage: $(basename ${0}) required... [optional]..."
     echo
     echo "required:"
+    echo "  -M | --mode"
+    echo "      Either 'direct' (offline / static) or"
+    echo "      'server' (online / dynamic)."
     echo "  -W | --dir_work"
     echo "      Working directory / path."
     echo "      This is where the experiment is executed from,"
@@ -49,6 +52,7 @@ function usage {
 
 while [[ ${#} -gt 0 ]]; do
     arg=${1}; case ${arg} in
+        -M | --mode     ) shift; mode=${1}          ;;
         -W | --dir_work ) shift; dir_work=${1}      ;;
         -O | --dir_outs ) shift; dir_outs=${1}      ;;
         -P | --dir_pref ) shift; dir_pref=${1}      ;;
@@ -61,13 +65,11 @@ while [[ ${#} -gt 0 ]]; do
 done
 
 for arg in \
+    mode \
     dir_work \
 ; do
     if [[ -z "${!arg:-}" ]]; then arg_missing --${arg}; fi
 done
-
-server=${rem%% -- *}
-client=${rem#* -- }
 
 # handle default values
 # ---------------------
@@ -95,12 +97,15 @@ echo "(runner) wdir     = ${wdir}"
 echo "(runner) odir     = ${odir}"
 
 # ==============================================================================
-#                                                                            RUN
+#                                                                    SERVER MODE
 # ==============================================================================
 
-cd ${wdir}
+function run_mode_server {
 
-cmd="${SDIR}/${server} --model ${model}"
+server=${rem%% -- *}
+client=${rem#* -- }
+
+cmd="${SDIR}/${server}"
 
 echo ${cmd} &> ${odir}/server.cmd
 eval ${cmd} &> ${odir}/server.log &
@@ -134,7 +139,7 @@ done
 
 echo "done, server is ready!"
 
-cmd="${SDIR}/${client} --model ${model}"
+cmd="${SDIR}/${client}"
 
 echo
 echo ${cmd}     &> ${odir}/client.cmd
@@ -151,9 +156,34 @@ echo "terminating server ..." >> ${odir}/server.log
 
 kill -2 ${server_pid}
 
+}
+
+# ==============================================================================
+#                                                                    DIRECT MODE
+# ==============================================================================
+
+function run_mode_direct {
+
+cmd=${SDIR}/${rem}
+
+echo ${cmd}
+echo ${cmd}     &> ${odir}/driver.cmd
+eval ${cmd} |& tee ${odir}/driver.log
+
+}
+
 # ==============================================================================
 #                                                                           DONE
 # ==============================================================================
+
+cd ${wdir}
+
+if   [[ ${mode} == direct ]]; then run_mode_direct
+elif [[ ${mode} == server ]]; then run_mode_server
+else
+    echo "error: invalid mode: '${mode}'"
+    exit 1
+fi
 
 echo
 
