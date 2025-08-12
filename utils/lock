@@ -1,0 +1,147 @@
+#!/bin/bash
+
+SOURCE=${BASH_SOURCE[0]}
+while [ -h "$SOURCE" ]; do
+  DIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
+  SOURCE=$(readlink "$SOURCE")
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SDIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
+
+function arg_invalid { echo "error: invalid argument: '${1}'" ; exit 1 ; }
+function arg_missing { echo "error: missing argument: '${1}'" ; exit 1 ; }
+
+function usage {
+    echo
+    echo "usage: $(basename ${0}) required... [optional]..."
+    echo
+    echo "required:"
+    echo "  -p | --platform"
+    echo "      Platform (hardware) where experiment is being executed."
+    echo "      Possible values include 'spyre', 'cuda', 'rocm', 'gaudi', etc."
+    echo "      This will mainly determine the mechanism by which the devices"
+    echo "      will be locked (reserved)."
+    echo "  -s | --sets"
+    echo "      Device sets. This controls which devices are visible and how,"
+    echo "      ideally, they should be assigned."
+    echo "  -d | --devs"
+    echo "      Number of devices to lock."
+    echo
+    echo "optional:"
+    echo "  -D | --directory"
+    echo "      Directory where lock will be written to."
+    echo "      Ideally some path that other processes will easily see"
+    echo "      and be able to use. Even better if other users can see too."
+    echo "      Defaults to '/tmp', since it is usually a good (local) option."
+    echo "  -c | --contiguous"
+    echo "      Do not pick devices in different sets."
+    echo "      Note that if the number of requested devices is larger"
+    echo "      than any partition, this will be ignored."
+    echo
+    exit 1
+}
+
+directory=/tmp/fmwork
+
+while [[ ${#} -gt 0 ]]; do
+    arg=${1}; case ${arg} in
+        -p | --platform   ) shift; platform=${1}      ;;
+        -s | --sets       ) shift; sets=${1}          ;;
+        -d | --devs       ) shift; devs=${1}          ;;
+        -D | --directory  ) shift; directory=${1}     ;;
+        -c | --contiguous )        contiguous=True    ;;
+        -h | --help       ) shift; usage              ;;
+        --                ) shift; rem=${@}; break    ;;
+         *                ) shift; arg_invalid ${arg} ;;
+    esac; shift
+done
+
+for arg in \
+    platform \
+    sets \
+    devs \
+; do
+    if [[ -z "${!arg:-}" ]]; then arg_missing --${arg}; fi
+done
+
+mkdir -p ${directory}
+
+# if contiguous, discard devsets that cannot hold the reservation
+# ---------------------------------------------------------------
+
+devsets=()
+
+if [[ ${contiguous} == True ]]; then
+    for devset in ${sets//:/ }; do
+        count=$(echo ${devset//,/ } | wc -w)
+        if [[ ${count} -ge ${devs} ]]; then
+            devsets+=(${devset})
+        fi
+    done
+fi
+
+# if no devsets were found, take the whole set as one
+# ---------------------------------------------------
+
+if [[ -z ${devsets[*]} ]]; then
+    devsets=(${sets//:/,})
+fi
+
+# iterate over devsets and attempt to reserve devices
+# ---------------------------------------------------
+
+LOCK=${directory}/lock-$(hostname)
+
+while :; do
+    for devset in ${devsets[@]}; do
+        locks=()
+        for dev in ${devset//,/ }; do
+            lock=${LOCK}.${dev}
+            if [[ ! -d ${lock} ]]; then
+                locks+=(${lock})
+            fi
+            if [[ ${#locks[@]} -eq ${devs} ]]; then
+                created=()
+                for lock in ${locks[@]}; do
+                    mkdir ${lock}
+                    if [[ ${?} -eq 0 ]]; then
+                        created+=(${lock})
+                    else
+                        for lock in ${created[@]}; do
+                            rmdir ${lock}
+                        done
+                        break 3 # devset got bad; reset
+                    fi
+                done
+                break 3 # got devices!
+            fi
+        done
+    done
+    sleep 2 # couldn't find; wait and retry
+done
+
+# actually reserve / set devices
+# ------------------------------
+
+if [[ ${platform} == "cuda" ]]; then
+    devices=()
+    for lock in ${created[*]}; do
+        devices+=(${lock##*.})
+    done
+
+    export CUDA_DEVICE_ORDER=PCI_BUS_ID
+    export CUDA_VISIBLE_DEVICES=$(echo ${devices[*]} | tr ' ' ,)
+fi
+
+# run command
+# -----------
+
+${rem}
+
+# unlock
+# ------
+
+for lock in ${created[*]}; do
+    rmdir ${lock}
+done
+
