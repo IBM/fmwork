@@ -88,13 +88,13 @@ odir=${dir_outs}/${dir_pref}/${exp_time}
 mkdir -p ${wdir}
 mkdir -p ${odir}
 
-echo
-echo "(runner) dir_work = ${dir_work}"
-echo "(runner) dir_outs = ${dir_outs}"
-echo "(runner) dir_pref = ${dir_pref}"
-echo "(runner) exp_time = ${exp_time}"
-echo "(runner) wdir     = ${wdir}"
-echo "(runner) odir     = ${odir}"
+# echo
+# echo "(runner) dir_work = ${dir_work}"
+# echo "(runner) dir_outs = ${dir_outs}"
+# echo "(runner) dir_pref = ${dir_pref}"
+# echo "(runner) exp_time = ${exp_time}"
+# echo "(runner) wdir     = ${wdir}"
+# echo "(runner) odir     = ${odir}"
 
 # ==============================================================================
 #                                                                    SERVER MODE
@@ -164,9 +164,13 @@ kill -2 ${server_pid}
 
 function run_mode_direct {
 
+if [[ -z ${rem} ]]; then
+    echo "nothing to do"
+    exit 1
+fi
+
 cmd=${SDIR}/${rem}
 
-echo ${cmd}
 echo ${cmd}     &> ${odir}/driver.cmd
 eval ${cmd} |& tee ${odir}/driver.log
 
