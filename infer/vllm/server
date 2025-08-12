@@ -30,7 +30,7 @@ done
 cmd="vllm serve ${model} ${args[*]}"
 
 echo
-env | sed 's/^/FMWORK ENV /'
+env | sort | sed 's/^/FMWORK ENV /'
 echo
 echo ${cmd}
 echo
