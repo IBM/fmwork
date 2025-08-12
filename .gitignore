@@ -3,4 +3,5 @@
 *.swp
 
 .misc/
+.nfs*
 
