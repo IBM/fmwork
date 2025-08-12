@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+
+def main():
+
+    parser = argparse.ArgumentParser()
+    parser.add = parser.add_argument
+    parser.add('--path',        type=str, required=True)
+    parser.add('--metadata_id', type=str)
+    args = parser.parse_args()
+
+    opts = []
+    hits = []
+
+    for line in open(args.path):
+
+        if line.startswith('FMWORK ARG'):
+
+            opts.append(line.strip()[11:])
+
+        if line.startswith('FMWORK SETUP'):
+            
+            setup = float(line.strip().split(' ')[-1])
+
+        if line.startswith('FMWORK GEN'):
+
+            split = line.strip().split(' ')
+
+            time_start  =       split[2]
+            time_end    =       split[3]
+            model_name  =       split[4]
+            input_size  =   int(split[5])
+            output_size =   int(split[6])
+            batch_size  =   int(split[7])
+            tp_size     =   int(split[8])
+            ttft_r      = float(split[9])
+            inf_r       = float(split[10])
+            inf         = float(split[11])
+            gen         = float(split[12])
+            ttft        = float(split[13])
+            itl         = float(split[14])
+            thp         = float(split[15])
+
+            hits.append({
+                'timestamp'     : time_start,
+                'metadata_id'   : args.metadata_id,
+                'engine'        : 'fmwork/infer/vllm',
+                'model'         : model_name,
+                'precision'     : None,
+                'input'         : input_size,
+                'output'        : output_size,
+                'batch'         : batch_size,
+                'tp'            : tp_size,
+                'opts'          : opts,
+                'warmup'        : None,
+                'setup'         : setup,
+                'ttft'          : ttft,
+                'itl'           : itl,
+                'thp'           : thp,
+            })
+
+    print(json.dumps(hits, indent=4))
+
+if __name__ == '__main__':
+    main()
+
