@@ -9,7 +9,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add = parser.add_argument
     parser.add('--path',        type=str, required=True)
-    parser.add('--metadata_id', type=str, required=True)
+    parser.add('--metadata_id', type=str)
     args = parser.parse_args()
 
     opts = []
