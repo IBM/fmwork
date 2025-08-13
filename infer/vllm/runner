@@ -24,14 +24,18 @@ function usage {
     echo "usage: $(basename ${0}) required... [optional]..."
     echo
     echo "required:"
-    echo "  -M | --mode"
-    echo "      Either 'direct' (offline / static) or"
-    echo "      'server' (online / dynamic)."
     echo "  -W | --dir_work"
     echo "      Working directory / path."
     echo "      This is where the experiment is executed from,"
     echo "      including where working files (e.g., compile artifacts)"
     echo "      are written to / loaded from."
+    echo "  -M | --mode"
+    echo "      Either 'direct' (offline / static) or"
+    echo "      'server' (online / dynamic)."
+    echo "  -m | --model_name"
+    echo "      Either a friendly model name "
+    echo "      (e.g., ibm-granite/granite-3.3-8b-instruct)"
+    echo "      or a (full / relative) path to a model folder."
     echo
     echo "optional:"
     echo "  -O | --dir_outs"
@@ -41,32 +45,49 @@ function usage {
     echo "      Also added to the outputs directory, if different."
     echo "      Prefix is added before the experiment timestamp."
     echo "      Useful for grouping a sweep of experiments together."
+    echo "  -S | --dir_suff"
+    echo "      Suffix (name/path) to be added to directories."
+    echo "      Similar behavior to --dir_pref."
     echo "  -T | --exp_time"
     echo "      Experiment timestamp."
     echo "      Used in combination with other pieces of information"
     echo "      to uniquely identify the experiment."
     echo "      If not provided, a timestamp will be generated."
+    echo "  -r | --model_root"
+    echo "      Root directory for models."
+    echo "      If specified, this will be combined to the model name"
+    echo "      to form a complete model path."
+    echo "  -e | --env"
+    echo "      Environment variable to set (KEY=VALUE format)."
+    echo "      Can be specified multiple times."
+    echo "      Use KEY=__UNSET__ to unset a variable."
     echo
     exit 1
 }
 
+envs=()
+
 while [[ ${#} -gt 0 ]]; do
     arg=${1}; case ${arg} in
-        -M | --mode     ) shift; mode=${1}          ;;
-        -W | --dir_work ) shift; dir_work=${1}      ;;
-        -O | --dir_outs ) shift; dir_outs=${1}      ;;
-        -P | --dir_pref ) shift; dir_pref=${1}      ;;
-        -T | --exp_time ) shift; exp_time=${1}      ;;
-        -m | --model    ) shift; model=${1}         ;;
-        -h | --help     ) shift; usage              ;;
-        --              ) shift; rem=${@}; break    ;;
-         *              ) shift; arg_invalid ${arg} ;;
+        -W | --dir_work   ) shift; dir_work=${1}      ;;
+        -M | --mode       ) shift; mode=${1}          ;;
+        -m | --model_name ) shift; model_name=${1}    ;;
+        -O | --dir_outs   ) shift; dir_outs=${1}      ;;
+        -P | --dir_pref   ) shift; dir_pref=${1}      ;;
+        -S | --dir_suff   ) shift; dir_suff=${1}      ;;
+        -T | --exp_time   ) shift; exp_time=${1}      ;;
+        -r | --model_root ) shift; model_root=${1}    ;;
+        -e | --env        ) shift; envs+=("${1}")     ;;
+        -h | --help       ) shift; usage              ;;
+        --                ) shift; rem=${@}; break    ;;
+         *                ) shift; arg_invalid ${arg} ;;
     esac; shift
 done
 
 for arg in \
     mode \
     dir_work \
+    model_name \
 ; do
     if [[ -z "${!arg:-}" ]]; then arg_missing --${arg}; fi
 done
@@ -75,22 +96,21 @@ done
 # ---------------------
 
 dir_outs=${dir_outs:-${dir_work}}
-dir_pref=${dir_pref:-}
 exp_time=${exp_time:-$(date +%Y%m%d-%H%M%S.%N)}
 
 # ==============================================================================
 #                                                                          SETUP
 # ==============================================================================
 
-wdir=${dir_work}/${dir_pref}/${exp_time}
-odir=${dir_outs}/${dir_pref}/${exp_time}
+wdir=${dir_work}/${dir_pref}/${exp_time}/${dir_suff}
+odir=${dir_outs}/${dir_pref}/${exp_time}/${dir_suff}
 
 mkdir -p ${wdir}
 mkdir -p ${odir}
 
 echo
-echo "(runner) wdir = ${wdir}"
-echo "(runner) odir = ${odir}"
+echo "wdir = ${wdir}"
+echo "odir = ${odir}"
 
 # ==============================================================================
 #                                                                    SERVER MODE
@@ -101,7 +121,11 @@ function run_mode_server {
 server=${rem%% -- *}
 client=${rem#* -- }
 
-cmd="${SDIR}/${server}"
+if [[ -n ${model_root} ]]; then model=${model_root}/${model_name}
+else                            model=${model_name}
+fi
+
+cmd="${SDIR}/${server} --model ${model}"
 
 echo ${cmd} &> ${odir}/server.cmd
 eval ${cmd} &> ${odir}/server.log &
@@ -136,11 +160,12 @@ done
 echo "done, server is ready!"
 
 # get true pid
+
 vllm_server_pid=$(\
     grep "Started server process" ${odir}/server.log |\
     grep -o '[0-9]\+')
 
-cmd="${SDIR}/${client}"
+cmd="${SDIR}/${client} --model ${model}"
 
 echo
 echo ${cmd}     &> ${odir}/client.cmd
@@ -167,14 +192,37 @@ kill -2 ${server_pid}
 function run_mode_direct {
 
 if [[ -z ${rem} ]]; then
+    echo
     echo "nothing to do"
     exit 1
 fi
 
-cmd=${SDIR}/${rem}
+echo
 
-echo ${cmd}     &> ${odir}/driver.cmd
-eval ${cmd} |& tee ${odir}/driver.log
+for keyval in ${envs[@]}; do
+    key=${keyval%%=*}
+    val=${keyval#*=}
+
+    echo "FMWORK EXP ${keyval}"     &>> ${odir}/driver.log
+
+    if [[ ${val} == __UNSET__ ]]; then unset  ${key}
+    else                               export ${key}=${val}
+    fi
+done
+
+echo                                &>> ${odir}/driver.log
+env | sort | sed 's/^/FMWORK ENV /' &>> ${odir}/driver.log
+
+if [[ -n ${model_root} ]]; then
+    model="--model_root ${model_root} --model_name ${model_name}"
+else
+    model="--model_name ${model_name}"
+fi
+
+cmd="${SDIR}/${rem} ${model}"
+
+echo ${cmd}        &> ${odir}/driver.cmd
+eval ${cmd} |& tee -a ${odir}/driver.log
 
 }
 
@@ -184,12 +232,18 @@ eval ${cmd} |& tee ${odir}/driver.log
 
 cd ${wdir}
 
+echo "model_root ${model_root}"    >> ${odir}/runner.log
+echo "model_name ${model_name}"    >> ${odir}/runner.log
+echo "time_start $(date "+%s.%N")" >> ${odir}/runner.log
+
 if   [[ ${mode} == direct ]]; then run_mode_direct
 elif [[ ${mode} == server ]]; then run_mode_server
 else
     echo "error: invalid mode: '${mode}'"
     exit 1
 fi
+
+echo "time_end   $(date "+%s.%N")" >> ${odir}/runner.log
 
 echo
 
