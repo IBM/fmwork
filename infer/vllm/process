@@ -3,26 +3,55 @@
 import argparse
 import json
 import os
+import sys
+import traceback
+
+class fmwork:
+    class Exception(Exception):
+        pass
 
 def main():
 
     parser = argparse.ArgumentParser()
     parser.add = parser.add_argument
-    parser.add('--path',        type=str, required=True)
-    parser.add('--metadata_id', type=str)
+    parser.add('--path',         type=str, required=True)
+    parser.add('--metadata_id',  type=str)
     args = parser.parse_args()
+
+    if os.path.isdir(args.path):
+        if os.path.exists(os.path.join(args.path, 'server.log')):
+            return process_server(args)
+
+    return process_direct(args)
+
+def process_direct(args):
+
+    if os.path.isdir(args.path):
+        log_driver = os.path.join(args.path, 'driver.log')
+    else:
+        log_driver = args.path
+
+    if not os.path.exists(log_driver):
+        raise fmwork.Exception(
+            f'Could not find {log_driver}.')
 
     opts = []
     hits = []
 
-    for line in open(args.path):
+    for line in open(log_driver):
+
+        if line.startswith('FMWORK EXP'):
+
+            split = line.strip().split(' ')
+            opt = '--env ' + ' '.join(split[2:])
+            opts.append(opt)
 
         if line.startswith('FMWORK ARG'):
 
             opts.append(line.strip()[11:])
 
         if line.startswith('FMWORK SETUP'):
-            
+
             setup = float(line.strip().split(' ')[-1])
 
         if line.startswith('FMWORK GEN'):
@@ -64,6 +93,118 @@ def main():
 
     print(json.dumps(hits, indent=4))
 
+def process_server(args):
+
+    log_runner  = os.path.join(args.path, 'runner.log')
+    cmd_server  = os.path.join(args.path, 'server.cmd')
+    log_server  = os.path.join(args.path, 'server.log')
+    cmd_client  = os.path.join(args.path, 'client.cmd')
+    log_client  = os.path.join(args.path, 'client.log')
+    log_metrics = os.path.join(args.path, 'metrics.log')
+
+    for path in [
+        cmd_server, log_server,
+        cmd_client, log_client,
+        log_metrics,
+    ]:
+        if not os.path.exists(path):
+            raise fmwork.Exception(
+                f'Could not find {path}.')
+
+    opts = []
+
+    # get model timestamps from runner log
+
+    for line in open(log_runner):
+
+        if line.startswith('model_name'):
+
+            model_name = line.strip().split(' ')[-1]
+
+        if line.startswith('time_start '):
+
+            time_start = line.strip().split(' ')[-1]
+
+        if line.startswith('time_end' ):
+
+            time_end   = line.strip().split(' ')[-1]
+
+    # get opts from server command and client command
+
+    line = open(cmd_server).read().strip()
+    for s in line.split('--')[1:]:
+        opts.append('[server] --' + s)
+
+    line = open(cmd_client).read().strip()
+    for s in line.split('--')[1:]:
+        opts.append('[client] --' + s)
+
+    # read parameters from opts
+
+    for opt in opts:
+        split = opt.split(' ')
+        cos   = split[0]
+        key   = split[1]
+        val   = ' '.join(split[2:])
+
+        if cos == '[server]':
+            if key == '--tensor-parallel-size': tp_size     = int(val)
+            if key == '--max-num-seqs':         batch_size  = int(val)
+        if cos == '[client]':
+            if key == '--random-input-len':     input_size  = int(val)
+            if key == '--random-output-len':    output_size = int(val)
+
+    # process metrics
+
+    for line in open(log_client):
+
+        if line.startswith('Benchmark duration'):
+            total_time = float(line.strip().split(' ')[-1])
+
+        if line.startswith('Mean TPOT (ms)'):
+            itl = float(line.strip().split(' ')[-1])
+
+    for line in open(log_metrics):
+
+        if line.startswith('vllm:request_prefill_time_seconds_count'):
+            reps = int(line.strip().split(' ')[-1].split('.')[0])
+
+        if line.startswith('vllm:request_prefill_time_seconds_sum'):
+            prefill_sum = float(line.strip().split(' ')[-1])
+
+    ttft = prefill_sum / reps + ( itl / 1000.0 )
+
+    thp  = \
+        ( batch_size * ( output_size - 1 ) ) / \
+        ( output_size * ( itl / 1000.0 ) )
+
+    hits = [{
+        'timestamp'     : time_start,
+        'metadata_id'   : args.metadata_id,
+        'engine'        : 'fmwork/infer/vllm',
+        'model'         : model_name,
+        'precision'     : None,
+        'input'         : input_size,
+        'output'        : output_size,
+        'batch'         : batch_size,
+        'tp'            : tp_size,
+        'opts'          : opts,
+        'warmup'        : None,
+        'setup'         : None,
+        'ttft'          : round(ttft, 3),
+        'itl'           : round(itl,  3),
+        'thp'           : round(thp,  1),
+    }]
+
+    print(json.dumps(hits, indent=4))
+
 if __name__ == '__main__':
-    main()
+    try:
+        main(); sys.exit(0)
+    except fmwork.Exception as e:
+        print(e); sys.exit(1)
+    except KeyboardInterrupt:
+        print('Interrupted.'); sys.exit(2+128)
+    except Exception:
+        traceback.print_exc(); sys.exit(3)
 
