@@ -133,11 +133,11 @@ def process_server(args):
 
     line = open(cmd_server).read().strip()
     for s in line.split('--')[1:]:
-        opts.append('[server] --' + s)
+        opts.append('[server] --' + s.strip())
 
     line = open(cmd_client).read().strip()
     for s in line.split('--')[1:]:
-        opts.append('[client] --' + s)
+        opts.append('[client] --' + s.strip())
 
     # read parameters from opts
 
