@@ -72,7 +72,6 @@ done
 
 for arg in \
     dir_work \
-    model_name \
 ; do
     if [[ -z "${!arg:-}" ]]; then arg_missing --${arg}; fi
 done
@@ -125,7 +124,11 @@ done
 echo                                &>> ${odir}/driver.log
 env | sort | sed 's/^/FMWORK ENV /' &>> ${odir}/driver.log
 
-cmd="${SDIR}/${rem} ${model}"
+if [[ "$prog" == */* ]]; then
+    cmd=${rem}
+else
+    cmd="${SDIR}/${rem}"
+fi
 
 echo ${cmd}        &> ${odir}/driver.cmd
 eval ${cmd} |& tee -a ${odir}/driver.log
