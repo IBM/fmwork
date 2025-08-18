@@ -1,0 +1,148 @@
+#!/bin/bash
+
+# set -o errexit
+# set -o nounset
+# set -o pipefail
+
+SOURCE=${BASH_SOURCE[0]}
+while [ -h "$SOURCE" ]; do
+  DIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
+  SOURCE=$(readlink "$SOURCE")
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SDIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
+
+# ==============================================================================
+#                                                                      ARGUMENTS
+# ==============================================================================
+
+function arg_invalid { echo "error: invalid argument: '${1}'" ; exit 1 ; }
+function arg_missing { echo "error: missing argument: '${1}'" ; exit 1 ; }
+
+function usage {
+    echo
+    echo "usage: $(basename ${0}) required... [optional]..."
+    echo
+    echo "required:"
+    echo "  -W | --dir_work"
+    echo "      Working directory / path."
+    echo "      This is where the experiment is executed from,"
+    echo "      including where working files (e.g., compile artifacts)"
+    echo "      are written to / loaded from."
+    echo
+    echo "optional:"
+    echo "  -O | --dir_outs"
+    echo "      Output path. If not set, defaults to working directory."
+    echo "  -P | --dir_pref"
+    echo "      Prefix (name/path) to be added to working directory."
+    echo "      Also added to the outputs directory, if different."
+    echo "      Prefix is added before the experiment timestamp."
+    echo "      Useful for grouping a sweep of experiments together."
+    echo "  -S | --dir_suff"
+    echo "      Suffix (name/path) to be added to directories."
+    echo "      Similar behavior to --dir_pref."
+    echo "  -T | --exp_time"
+    echo "      Experiment timestamp."
+    echo "      Used in combination with other pieces of information"
+    echo "      to uniquely identify the experiment."
+    echo "      If not provided, a timestamp will be generated."
+    echo "  -e | --env"
+    echo "      Environment variable to set (KEY=VALUE format)."
+    echo "      Can be specified multiple times."
+    echo "      Use KEY=__UNSET__ to unset a variable."
+    echo
+    exit 1
+}
+
+envs=()
+
+while [[ ${#} -gt 0 ]]; do
+    arg=${1}; case ${arg} in
+        -W | --dir_work   ) shift; dir_work=${1}      ;;
+        -O | --dir_outs   ) shift; dir_outs=${1}      ;;
+        -P | --dir_pref   ) shift; dir_pref=${1}      ;;
+        -S | --dir_suff   ) shift; dir_suff=${1}      ;;
+        -T | --exp_time   ) shift; exp_time=${1}      ;;
+        -e | --env        ) shift; envs+=("${1}")     ;;
+        -h | --help       ) shift; usage              ;;
+        --                ) shift; rem=${@}; break    ;;
+         *                ) shift; arg_invalid ${arg} ;;
+    esac; shift
+done
+
+for arg in \
+    dir_work \
+    model_name \
+; do
+    if [[ -z "${!arg:-}" ]]; then arg_missing --${arg}; fi
+done
+
+# handle default values
+# ---------------------
+
+dir_outs=${dir_outs:-${dir_work}}
+exp_time=${exp_time:-$(date +%Y%m%d-%H%M%S.%N)}
+
+# ==============================================================================
+#                                                                          SETUP
+# ==============================================================================
+
+wdir=${dir_work}/${dir_pref}/${exp_time}/${dir_suff}
+odir=${dir_outs}/${dir_pref}/${exp_time}/${dir_suff}
+
+mkdir -p ${wdir}
+mkdir -p ${odir}
+
+echo
+echo "wdir = ${wdir}"
+echo "odir = ${odir}"
+
+# ==============================================================================
+#                                                                    DIRECT MODE
+# ==============================================================================
+
+function run_mode_direct {
+
+if [[ -z ${rem} ]]; then
+    echo
+    echo "nothing to do"
+    exit 1
+fi
+
+echo
+
+for keyval in ${envs[@]}; do
+    key=${keyval%%=*}
+    val=${keyval#*=}
+
+    echo "FMWORK EXP ${keyval}"     &>> ${odir}/driver.log
+
+    if [[ ${val} == __UNSET__ ]]; then unset  ${key}
+    else                               export ${key}=${val}
+    fi
+done
+
+echo                                &>> ${odir}/driver.log
+env | sort | sed 's/^/FMWORK ENV /' &>> ${odir}/driver.log
+
+cmd="${SDIR}/${rem} ${model}"
+
+echo ${cmd}        &> ${odir}/driver.cmd
+eval ${cmd} |& tee -a ${odir}/driver.log
+
+}
+
+# ==============================================================================
+#                                                                           DONE
+# ==============================================================================
+
+cd ${wdir}
+
+echo "time_start $(date "+%s.%N")" >> ${odir}/runner.log
+
+run_mode_direct
+
+echo "time_end   $(date "+%s.%N")" >> ${odir}/runner.log
+
+echo
+
