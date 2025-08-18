@@ -32,15 +32,19 @@ def setup_args():
 
     parser = argparse.ArgumentParser()
     parser.add = parser.add_argument
-    parser.add('--platform',    type=str, required=True)
-    parser.add('--model_class', type=str, required=True)
-    parser.add('--model_root',  type=str)
-    parser.add('--model_name',  type=str, required=True)
-    parser.add('--compile',     action='store_true')
-    parser.add('--eval',        action='store_true')
-    parser.add('--input_sizes', type=str, required=True)
-    parser.add('--batch_sizes', type=str, required=True)
-    parser.add('--reps',        type=int, required=True)
+    parser.add('--platform',     type=str,   required=True)
+    parser.add('--model_class',  type=str,   required=True)
+    parser.add('--model_root',   type=str)
+    parser.add('--model_name',   type=str,   required=True)
+    parser.add('--compile',      action='store_true')
+    parser.add('--eval',         action='store_true')
+    parser.add('--input_sizes',  type=str,   required=True)
+    parser.add('--batch_sizes',  type=str,   required=True)
+    parser.add('--min_reps',     type=int,   default=10)
+    parser.add('--warmup',       type=float, default=0.2)
+    parser.add('--epsilon',      type=float, default=0.05)
+    parser.add('--max_duration', type=float, default=60.0)
+
 
     args, opts = parser.parse_known_args()
 
@@ -150,12 +154,50 @@ def bench_combo(args, model, generator, input_size, batch_size):
 
     fmwork.banner('RUN', input_size, '/', batch_size)
 
-    ts = []; dts = []
-    for rep in range(args.reps):
-        timings = bench_combo_rep(
+    rep = -1
+    ts  = []
+    dts = []
+
+    while True:
+
+        rep += 1
+
+        t0, t1, dt = bench_combo_rep(
             args, model, generator, input_size, batch_size, rep)
-        ts.extend(timings[:2])
-        dts.append(timings[2])
+        ts.extend([t0, t1])
+        dts.append(dt)
+
+        _skp = int(args.warmup * len(dts))
+        _rem = dts[_skp:]
+        _dur = fmwork.time_diff(ts[-1], ts[0])
+
+        if len(_rem) >= 3:
+            _med = fmwork.med(dts[_skp:])
+            _std = fmwork.std(dts[_skp:])
+            _stp = _std / _med
+        else:
+            _stp = None
+
+        print(
+            'FMWORK REP',
+            rep + 1,
+            fmwork.time_format(t0), fmwork.time_format(t1),
+            '%.9f' % (dt),
+            '%.3f' % (_stp) if _stp else '')
+
+        if len(dts) < args.min_reps: continue
+
+        if _stp and _stp <= args.epsilon:
+            print()
+            print('converged to epsilon %.3f <= %.3f after %d iterations' % (
+                _stp, args.epsilon, rep+1))
+            break
+
+        if _dur >= args.max_duration and len(dts) >= 3:
+            print()
+            print('stopping with duration %.3f >= %.3f after %d iterations' % (
+                _dur, args.max_duration, rep+1))
+            break
 
     show(args, model, input_size, batch_size, ts, dts)
 
@@ -172,12 +214,6 @@ def bench_combo_rep(args, model, generator, input_size, batch_size, rep):
         torch.cuda.synchronize()
     t1 = fmwork.time_get()
     dt = fmwork.time_diff(t1, t0)
-
-    print(
-        'FMWORK REP',
-        rep + 1, args.reps,
-        fmwork.time_format(t0), fmwork.time_format(t1),
-        '%.9f' % (dt))
 
     return t0, t1, dt
 
