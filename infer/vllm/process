@@ -16,6 +16,8 @@ def main():
     parser.add = parser.add_argument
     parser.add('--path',         type=str, required=True)
     parser.add('--metadata_id',  type=str)
+    parser.add('--precision',    type=str, help='Model precision (e.g., fp16, bf16, int8)')
+    parser.add('--model',        type=str, help='Override model name from logs')
     args = parser.parse_args()
 
     if os.path.isdir(args.path):
@@ -23,6 +25,18 @@ def main():
             return process_server(args)
 
     return process_direct(args)
+
+def get_batch_mode(opts):
+    """Determine batch_mode based on VLLM_SPYRE_USE_CB environment variable"""
+    return "continuous" if any("--env VLLM_SPYRE_USE_CB=1" in opt for opt in opts) else "static"
+
+def extract_model_version(model_name):
+    """Extract model version/branch from model name"""
+    if '/' in model_name and model_name.count('/') >= 2:
+        # For names like "meta-llama/Llama-3.1-8B-Instruct/main"
+        parts = model_name.split('/')
+        return parts[-1] if len(parts) > 2 else None
+    return None
 
 def process_direct(args):
 
@@ -73,12 +87,19 @@ def process_direct(args):
             itl         = float(split[14])
             thp         = float(split[15])
 
+            # Use override model name if provided, otherwise use parsed model_name
+            final_model_name = args.model if args.model else model_name
+            model_version = extract_model_version(final_model_name)
+
             hits.append({
                 'timestamp'     : time_start,
                 'metadata_id'   : args.metadata_id,
                 'engine'        : 'fmwork/infer/vllm',
-                'model'         : model_name,
-                'precision'     : None,
+                'model'         : final_model_name,
+                'model_version' : model_version,
+                'mode'          : "direct",
+                'batch_mode'    : get_batch_mode(opts),
+                'precision'     : args.precision,
                 'input'         : input_size,
                 'output'        : output_size,
                 'batch'         : batch_size,
@@ -178,12 +199,19 @@ def process_server(args):
         ( batch_size * ( output_size - 1 ) ) / \
         ( output_size * ( itl / 1000.0 ) )
 
+    # Use override model name if provided, otherwise use parsed model_name
+    final_model_name = args.model if args.model else model_name
+    model_version = extract_model_version(final_model_name)
+
     hits = [{
         'timestamp'     : time_start,
         'metadata_id'   : args.metadata_id,
         'engine'        : 'fmwork/infer/vllm',
-        'model'         : model_name,
-        'precision'     : None,
+        'model'         : final_model_name,
+        'model_version' : model_version,
+        'mode'          : "server",
+        'batch_mode'    : get_batch_mode(opts),
+        'precision'     : args.precision,
         'input'         : input_size,
         'output'        : output_size,
         'batch'         : batch_size,

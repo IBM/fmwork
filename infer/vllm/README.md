@@ -276,13 +276,21 @@ FMWORK GEN 1755063811.412279354 1755063816.115997318 meta-llama/Llama-3.1-8B-Ins
 
 After using `process` script (provide the path to the experiment folder):
 
+```bash
+./process --path <PATH> --metadata_id <ID> --precision <PRECISION> [--model <MODEL>]
+```
+
+
 ```json
 [
     {
         "timestamp": "1755063811.412279354",
         "metadata_id": null,
         "engine": "fmwork/infer/vllm",
-        "model": "meta-llama/Llama-3.1-8B-Instruct/main",
+        "model": "meta-llama/Llama-3.1-8B-Instruct",
+        "model_version": "main",
+        "mode": "direct",
+        "batch_mode": "static",
         "precision": null,
         "input": 1024,
         "output": 128,
@@ -313,3 +321,26 @@ After using `process` script (provide the path to the experiment folder):
     }
 ]
 ```
+
+### Output Fields
+
+| Field | Description |
+|-------|-------------|
+| `timestamp` | Benchmark start time |
+| `metadata_id` | User-provided environment identifier |
+| `engine` | Inference engine (always "fmwork/infer/vllm") |
+| `model` | Model name (standard HF model ID or recognized identifier) |
+| `model_revision` | Model version/branch |
+| `mode` | Benchmark mode ("server" or "direct") |
+| `batch_mode` | Batching mode ("continuous" or "static") |
+| `precision` | Model precision |
+| `input` | Input sequence length |
+| `output` | Output sequence length |
+| `batch` | Batch size |
+| `tp` | Tensor parallel size |
+| `opts` | Command line options used |
+| `warmup` | Warmup time (may be null) |
+| `setup` | Setup time in seconds |
+| `ttft` | Time to first token (ms) |
+| `itl` | Inter-token latency (ms) |
+| `thp` | Throughput (tokens/second) |
