@@ -30,6 +30,7 @@ def process_direct(args):
         log_driver = os.path.join(args.path, 'driver.log')
     else:
         log_driver = args.path
+    warmup = None
 
     if not os.path.exists(log_driver):
         raise fmwork.Exception(
@@ -38,7 +39,10 @@ def process_direct(args):
     opts = []
     hits = []
 
-    for line in open(log_driver):
+    for line in open(log_driver, errors='ignore'):
+        if warmup is None:
+            if 'init engine (profile, create kv cache, warmup model) took' in line:
+                warmup = float(line.split('took ')[1].split(' seconds')[0])
 
         if line.startswith('FMWORK EXP'):
 
@@ -84,7 +88,7 @@ def process_direct(args):
                 'batch'         : batch_size,
                 'tp'            : tp_size,
                 'opts'          : opts,
-                'warmup'        : None,
+                'warmup'        : round(warmup, 3) if warmup is not None else None,
                 'setup'         : setup,
                 'ttft'          : ttft,
                 'itl'           : itl,
@@ -207,4 +211,3 @@ if __name__ == '__main__':
         print('Interrupted.'); sys.exit(2+128)
     except Exception:
         traceback.print_exc(); sys.exit(3)
-
