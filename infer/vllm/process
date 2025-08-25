@@ -3,12 +3,66 @@
 import argparse
 import json
 import os
+import re
 import sys
 import traceback
 
 class fmwork:
     class Exception(Exception):
         pass
+
+def check_error_in_log(log_path):
+
+    if not os.path.exists(log_path):
+        return None, None
+    
+    error_patterns = [
+        ("OOR", r"terminate called after throwing an instance of 'std::out_of_range'"),
+        ("MFS", r"DtException: Must find space in DDR"),
+        ("UMG", r"DtException: Unable to map graph within architecture constraints"), 
+        ("PVF", r"DtException: Program verification failed"),
+        ("VMS", r"DtException: Need to find a valid memory space"),
+        ("DIR", r"RuntimeError.*DDR init retried"),
+        ("RPC", r"TimeoutError: RPC call to execute_model timed out\."),
+    ]
+    
+    try:
+        content = open(log_path, 'r', errors='ignore').read()
+        for error_code, pattern in error_patterns:
+            if re.search(pattern, content):
+                return error_code, f'{error_code} | "{pattern}"'
+    except Exception as e:
+        return "READ_ERROR", f'READ_ERROR | "Could not read log file: {str(e)}"'
+    
+    return None, None
+
+def get_server_completion_info(args_path):
+
+    cmd_client = os.path.join(args_path, 'client.cmd')
+    log_client = os.path.join(args_path, 'client.log')
+    
+    num_prompts = None
+    successful_requests = None
+    
+    if os.path.exists(cmd_client):
+        try:
+            content = open(cmd_client, 'r').read()
+            match = re.search(r'--num-prompts\s+(\d+)', content)
+            if match:
+                num_prompts = int(match.group(1))
+        except Exception:
+            pass
+    
+    if os.path.exists(log_client):
+        try:
+            for line in open(log_client, 'r'):
+                if line.startswith('Successful requests:'):
+                    successful_requests = int(line.split()[-1])
+                    break
+        except Exception:
+            pass
+    
+    return num_prompts, successful_requests
 
 def main():
 
@@ -32,8 +86,14 @@ def process_direct(args):
     else:
         log_driver = args.path
 
-    warmup     = None
+    # Initialize variables
+    warmup = None
     batch_mode = 'static'
+    batch_size = None
+    input_size = None
+    output_size = None
+    tp_size = None
+    setup = None
 
     if not os.path.exists(log_driver):
         raise fmwork.Exception(
@@ -41,6 +101,12 @@ def process_direct(args):
 
     opts = []
     hits = []
+
+    # Check for errors in driver.log
+    error_code, error_msg = check_error_in_log(log_driver)
+    
+    # Determine if execution was successful (has FMWORK GEN entries)
+    has_success_data = False
 
     for line in open(log_driver, errors='ignore'):
         if warmup is None:
@@ -61,6 +127,36 @@ def process_direct(args):
         if line.startswith('FMWORK ARG'):
 
             opts.append(line.strip()[11:])
+            
+            # Parse FMWORK ARG parameters for direct mode (backup values)
+            arg_line = line.strip()[11:]  # Remove "FMWORK ARG "
+            parts = arg_line.split()
+            if len(parts) >= 2:
+                key = parts[0]
+                val = ' '.join(parts[1:])
+                
+                if key == '--batch_sizes':
+                    try:
+                        batch_size = int(val)
+                    except ValueError:
+                        pass
+                elif key == '--input_sizes': 
+                    try:
+                        input_size = int(val)
+                    except ValueError:
+                        pass
+                elif key == '--output_sizes':
+                    try:
+                        # Handle "1,128" format - take the larger value
+                        sizes = [int(x.strip()) for x in val.split(',')]
+                        output_size = max(sizes)
+                    except ValueError:
+                        pass
+                elif key == '--tp_size':
+                    try:
+                        tp_size = int(val)
+                    except ValueError:
+                        pass
 
         if line.startswith('FMWORK SETUP'):
 
@@ -68,11 +164,13 @@ def process_direct(args):
 
         if line.startswith('FMWORK GEN'):
 
+            has_success_data = True
             split = line.strip().split(' ')
 
             time_start  =       split[2]
             time_end    =       split[3]
             model_name  =       split[4]
+            # FMWORK GEN values override FMWORK ARG values (actual vs planned)
             input_size  =   int(split[5])
             output_size =   int(split[6])
             batch_size  =   int(split[7])
@@ -84,6 +182,14 @@ def process_direct(args):
             ttft        = float(split[13])
             itl         = float(split[14])
             thp         = float(split[15])
+
+            # Determine status
+            if error_code is None:
+                status = "OK"
+            else:
+                status = f"PART_{error_code}"
+                
+            notes = []
 
             hits.append({
                 'timestamp'     : time_start,
@@ -104,7 +210,43 @@ def process_direct(args):
                 'mode'          : 'direct',
                 'batch_mode'    : batch_mode,
                 'range_ratio'   : 0.0,
+                'status'        : status,
+                'error_msg'     : error_msg,
+                'notes'         : notes,
             })
+
+    # If no FMWORK GEN entries found, this is a failure
+    if not has_success_data:
+        if error_code:
+            status = f"ERR_{error_code}"
+        else:
+            status = "ERR_UNKNOWN"
+            if not error_msg:
+                error_msg = "UNKNOWN | \"No success data and no identifiable error\""
+        
+        hits.append({
+            'timestamp'     : None,
+            'metadata_id'   : args.metadata_id,
+            'engine'        : 'fmwork/infer/vllm',
+            'model'         : None,
+            'precision'     : args.precision,
+            'input'         : input_size,
+            'output'        : output_size,
+            'batch'         : batch_size,
+            'tp'            : tp_size,
+            'opts'          : opts,
+            'warmup'        : None,
+            'setup'         : setup,
+            'ttft'          : None,
+            'itl'           : None,
+            'thp'           : None,
+            'mode'          : 'direct',
+            'batch_mode'    : batch_mode,
+            'range_ratio'   : 0.0,
+            'status'        : status,
+            'error_msg'     : error_msg,
+            'notes'         : [],
+        })
 
     print(json.dumps(hits, indent=4))
 
@@ -117,45 +259,46 @@ def process_server(args):
     log_client  = os.path.join(args.path, 'client.log')
     log_metrics = os.path.join(args.path, 'metrics.log')
 
-    for path in [
-        cmd_server, log_server,
-        cmd_client, log_client,
-        log_metrics,
-    ]:
+    # Check required files for server mode
+    required_files = [cmd_server, log_server]
+    for path in required_files:
         if not os.path.exists(path):
             raise fmwork.Exception(
                 f'Could not find {path}.')
+    
+    # Optional files for successful runs
+    optional_files = [cmd_client, log_client, log_metrics]
 
     opts = []
 
+    # Check for errors in server.log (following bash script logic)
+    error_code, error_msg = check_error_in_log(log_server)
+
     # get model timestamps from runner log
+    model_name = None
+    time_start = None
+    time_end = None
 
-    for line in open(log_runner):
+    if os.path.exists(log_runner):
+        for line in open(log_runner):
+            if line.startswith('model_name'):
+                model_name = line.strip().split(' ')[-1]
+            if line.startswith('time_start '):
+                time_start = line.strip().split(' ')[-1]
+            if line.startswith('time_end' ):
+                time_end   = line.strip().split(' ')[-1]
 
-        if line.startswith('model_name'):
-
-            model_name = line.strip().split(' ')[-1]
-
-        if line.startswith('time_start '):
-
-            time_start = line.strip().split(' ')[-1]
-
-        if line.startswith('time_end' ):
-
-            time_end   = line.strip().split(' ')[-1]
-
-    # get opts from server command and client command
-
+    # get opts from server command and client command (if exists)
     line = open(cmd_server).read().strip()
     for s in line.split('--')[1:]:
         opts.append('[server] --' + s.strip())
 
-    line = open(cmd_client).read().strip()
-    for s in line.split('--')[1:]:
-        opts.append('[client] --' + s.strip())
+    if os.path.exists(cmd_client):
+        line = open(cmd_client).read().strip()
+        for s in line.split('--')[1:]:
+            opts.append('[client] --' + s.strip())
 
     # read environment variables looking for meaningful information
-
     batch_mode = 'static'
 
     for line in open(log_server):
@@ -165,8 +308,7 @@ def process_server(args):
                 if value == '1':
                     batch_mode = 'continuous'
 
-    # read parameters from opts
-
+    # read parameters from opts (enhanced for server.cmd)
     input_size  = None
     output_size = None
     batch_size  = None
@@ -182,55 +324,91 @@ def process_server(args):
         if cos == '[server]':
             if key == '--tensor-parallel-size': tp_size     =   int(val)
             if key == '--max-num-seqs':         batch_size  =   int(val)
-        if cos == '[client]':
+            # Try to extract model from server.cmd as backup
+            if key == '--model' and not model_name:
+                model_name = val
+        if cos == '[client]' and os.path.exists(cmd_client):
             if key == '--random-input-len':     input_size  =   int(val)
             if key == '--random-output-len':    output_size =   int(val)
             if key == '--random-range-ratio':   range_ratio = float(val)
 
-    # process metrics
+    # Initialize default values for metrics
+    ttft = None
+    itl = None
+    thp = None
+    requests_ok = None
+    total_input = None
+    total_output = None
+    total_time = None
 
-    for line in open(log_client):
+    # Check if server mode had successful execution (required files exist)
+    has_success_data = (os.path.exists(log_client) and os.path.exists(log_metrics))
 
-        if line.startswith('Successful requests'):
-            requests_ok  = int(line.strip().split(' ')[-1])
+    # Only process metrics if we have success data
+    if has_success_data:
+        # process metrics
+        try:
+            for line in open(log_client):
 
-        if line.startswith('Total input tokens'):
-            total_input  = int(line.strip().split(' ')[-1])
+                if line.startswith('Successful requests'):
+                    requests_ok  = int(line.strip().split(' ')[-1])
 
-        if line.startswith('Total generated tokens'):
-            total_output = int(line.strip().split(' ')[-1])
+                if line.startswith('Total input tokens'):
+                    total_input  = int(line.strip().split(' ')[-1])
 
-        if line.startswith('Benchmark duration'):
-            total_time   = float(line.strip().split(' ')[-1])
+                if line.startswith('Total generated tokens'):
+                    total_output = int(line.strip().split(' ')[-1])
 
-        if line.startswith('Median TTFT (ms)'):
-            ttft = float(line.strip().split(' ')[-1]) / 1000.0 # ms to s
+                if line.startswith('Benchmark duration'):
+                    total_time   = float(line.strip().split(' ')[-1])
 
-        if line.startswith('Median ITL (ms)'):
-            itl  = float(line.strip().split(' ')[-1])
+                if line.startswith('Median TTFT (ms)'):
+                    ttft = float(line.strip().split(' ')[-1]) / 1000.0 # ms to s
 
-        if line.startswith('Output token throughput (tok/s)'):
-            thp  = float(line.strip().split(' ')[-1])
+                if line.startswith('Median ITL (ms)'):
+                    itl  = float(line.strip().split(' ')[-1])
 
-    # for line in open(log_metrics):
-    #
-    #     if line.startswith('vllm:request_prefill_time_seconds_count'):
-    #         reps = int(line.strip().split(' ')[-1].split('.')[0])
-    #
-    #     if line.startswith('vllm:request_prefill_time_seconds_sum'):
-    #         prefill_sum = float(line.strip().split(' ')[-1])
-    #
-    # ttft = prefill_sum / reps + ( itl / 1000.0 )
-    #
-    # thp  = \
-    #     ( batch_size * ( output_size - 1 ) ) / \
-    #     ( output_size * ( itl / 1000.0 ) )
+                if line.startswith('Output token throughput (tok/s)'):
+                    thp  = float(line.strip().split(' ')[-1])
 
-    # if shapes could not be read, might be using different dataset
-    # read values from output instead
+            # if shapes could not be read, might be using different dataset
+            # read values from output instead
+            if requests_ok and requests_ok > 0:
+                if not input_size and total_input:  
+                    input_size  = int(total_input  / requests_ok)
+                if not output_size and total_output: 
+                    output_size = int(total_output / requests_ok)
+                    
+        except Exception as e:
+            # If we can't process metrics due to error, set error info
+            if not error_code:
+                error_code = "METRICS_ERROR"
+                error_msg = f'METRICS_ERROR | "Failed to process metrics: {str(e)}"'
 
-    if not input_size:  input_size  = int ( total_input  / requests_ok )
-    if not output_size: output_size = int ( total_output / requests_ok )
+    # Determine status and notes
+    status = None
+    notes = []
+
+    if has_success_data:
+        # Get completion info for server mode
+        num_prompts, successful_requests = get_server_completion_info(args.path)
+        
+        if error_code is None:
+            status = "OK"
+        else:
+            status = f"PART_{error_code}"
+            
+        # Add completion ratio to notes if available
+        if num_prompts is not None and successful_requests is not None:
+            notes.append(f"successful_requests/num-prompts:{successful_requests}/{num_prompts}")
+    else:
+        # Failed execution
+        if error_code:
+            status = f"ERR_{error_code}"
+        else:
+            status = "ERR_UNKNOWN"
+            if not error_msg:
+                error_msg = "UNKNOWN | \"No success data and no identifiable error\""
 
     hits = [{
         'timestamp'     : time_start,
@@ -245,12 +423,15 @@ def process_server(args):
         'opts'          : opts,
         'warmup'        : None,
         'setup'         : None,
-        'ttft'          : round(ttft, 3),
-        'itl'           : round(itl,  1),
-        'thp'           : round(thp,  1),
+        'ttft'          : round(ttft, 3) if ttft is not None else None,
+        'itl'           : round(itl,  1) if itl is not None else None,
+        'thp'           : round(thp,  1) if thp is not None else None,
         'mode'          : 'server',
         'batch_mode'    : batch_mode,
         'range_ratio'   : range_ratio,
+        'status'        : status,
+        'error_msg'     : error_msg,
+        'notes'         : notes,
     }]
 
     print(json.dumps(hits, indent=4))
