@@ -36,6 +36,16 @@ def check_error_in_log(log_path):
     
     return None, None
 
+def extract_model_version(parsed_model, input_model):
+
+    if not parsed_model or not input_model:
+        return None
+    
+    if parsed_model.startswith(input_model + '/'):
+        return parsed_model[len(input_model) + 1:]
+    
+    return None
+
 def get_server_completion_info(args_path):
 
     cmd_client = os.path.join(args_path, 'client.cmd')
@@ -71,6 +81,7 @@ def main():
     parser.add('--path',         type=str, required=True)
     parser.add('--precision',    type=str, default='fp16')
     parser.add('--metadata_id',  type=str)
+    parser.add('--model',        type=str, help='Expected model name for version extraction')
     args = parser.parse_args()
 
     if os.path.isdir(args.path):
@@ -89,6 +100,7 @@ def process_direct(args):
     # Initialize variables
     warmup = None
     batch_mode = 'static'
+    model_name = None
     batch_size = None
     input_size = None
     output_size = None
@@ -157,6 +169,10 @@ def process_direct(args):
                         tp_size = int(val)
                     except ValueError:
                         pass
+                
+                # Always check for model_name
+                if key == '--model_name':
+                    model_name = val
 
         if line.startswith('FMWORK SETUP'):
 
@@ -169,7 +185,7 @@ def process_direct(args):
 
             time_start  =       split[2]
             time_end    =       split[3]
-            model_name  =       split[4]
+            model_name  =       split[4]  # Parse from FMWORK GEN first
             # FMWORK GEN values override FMWORK ARG values (actual vs planned)
             input_size  =   int(split[5])
             output_size =   int(split[6])
@@ -191,11 +207,20 @@ def process_direct(args):
                 
             notes = []
 
+            # Apply --model parameter processing after parsing
+            if args.model:
+                model_version = extract_model_version(model_name, args.model)
+                final_model_name = args.model
+            else:
+                model_version = None
+                final_model_name = model_name
+
             hits.append({
                 'timestamp'     : time_start,
                 'metadata_id'   : args.metadata_id,
                 'engine'        : 'fmwork/infer/vllm',
-                'model'         : model_name,
+                'model'         : final_model_name,
+                'model_version' : model_version,
                 'precision'     : args.precision,
                 'input'         : input_size,
                 'output'        : output_size,
@@ -224,11 +249,20 @@ def process_direct(args):
             if not error_msg:
                 error_msg = "UNKNOWN | \"No success data and no identifiable error\""
         
+        # Apply --model parameter processing after parsing
+        if args.model:
+            model_version = extract_model_version(model_name, args.model)
+            final_model_name = args.model
+        else:
+            model_version = None
+            final_model_name = model_name
+        
         hits.append({
             'timestamp'     : None,
             'metadata_id'   : args.metadata_id,
             'engine'        : 'fmwork/infer/vllm',
-            'model'         : None,
+            'model'         : final_model_name,
+            'model_version' : model_version,
             'precision'     : args.precision,
             'input'         : input_size,
             'output'        : output_size,
@@ -410,11 +444,20 @@ def process_server(args):
             if not error_msg:
                 error_msg = "UNKNOWN | \"No success data and no identifiable error\""
 
+    # Handle model name and version extraction (after parsing from logs)
+    if args.model:
+        model_version = extract_model_version(model_name, args.model)
+        final_model_name = args.model
+    else:
+        model_version = None
+        final_model_name = model_name
+
     hits = [{
         'timestamp'     : time_start,
         'metadata_id'   : args.metadata_id,
         'engine'        : 'fmwork/infer/vllm',
-        'model'         : model_name,
+        'model'         : final_model_name,
+        'model_version' : model_version,
         'precision'     : args.precision,
         'input'         : input_size,
         'output'        : output_size,
