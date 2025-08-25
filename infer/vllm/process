@@ -204,7 +204,7 @@ def process_server(args):
             total_time   = float(line.strip().split(' ')[-1])
 
         if line.startswith('Median TTFT (ms)'):
-            ttft = float(line.strip().split(' ')[-1])
+            ttft = float(line.strip().split(' ')[-1]) / 1000.0 # ms to s
 
         if line.startswith('Median ITL (ms)'):
             itl  = float(line.strip().split(' ')[-1])
