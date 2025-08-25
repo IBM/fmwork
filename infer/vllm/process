@@ -15,6 +15,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add = parser.add_argument
     parser.add('--path',         type=str, required=True)
+    parser.add('--precision',    type=str, default='fp16')
     parser.add('--metadata_id',  type=str)
     args = parser.parse_args()
 
@@ -30,7 +31,9 @@ def process_direct(args):
         log_driver = os.path.join(args.path, 'driver.log')
     else:
         log_driver = args.path
-    warmup = None
+
+    warmup     = None
+    batch_mode = 'static'
 
     if not os.path.exists(log_driver):
         raise fmwork.Exception(
@@ -49,6 +52,11 @@ def process_direct(args):
             split = line.strip().split(' ')
             opt = '--env ' + ' '.join(split[2:])
             opts.append(opt)
+
+            if 'VLLM_SPYRE_USE_CB' in line:
+                value = line.strip().split('=')[-1]
+                if value == '1':
+                    batch_mode = 'continuous'
 
         if line.startswith('FMWORK ARG'):
 
@@ -82,7 +90,7 @@ def process_direct(args):
                 'metadata_id'   : args.metadata_id,
                 'engine'        : 'fmwork/infer/vllm',
                 'model'         : model_name,
-                'precision'     : None,
+                'precision'     : args.precision,
                 'input'         : input_size,
                 'output'        : output_size,
                 'batch'         : batch_size,
@@ -93,6 +101,9 @@ def process_direct(args):
                 'ttft'          : ttft,
                 'itl'           : itl,
                 'thp'           : thp,
+                'mode'          : 'direct',
+                'batch_mode'    : batch_mode,
+                'range_ratio'   : 0.0,
             })
 
     print(json.dumps(hits, indent=4))
@@ -143,7 +154,24 @@ def process_server(args):
     for s in line.split('--')[1:]:
         opts.append('[client] --' + s.strip())
 
+    # read environment variables looking for meaningful information
+
+    batch_mode = 'static'
+
+    for line in open(log_server):
+        if line.startswith('FMWORK EXP'):
+            if 'VLLM_SPYRE_USE_CB' in line:
+                value = line.strip().split('=')[-1]
+                if value == '1':
+                    batch_mode = 'continuous'
+
     # read parameters from opts
+
+    input_size  = None
+    output_size = None
+    batch_size  = None
+    tp_size     = None
+    range_ratio = 0.0
 
     for opt in opts:
         split = opt.split(' ')
@@ -152,24 +180,37 @@ def process_server(args):
         val   = ' '.join(split[2:])
 
         if cos == '[server]':
-            if key == '--tensor-parallel-size': tp_size     = int(val)
-            if key == '--max-num-seqs':         batch_size  = int(val)
+            if key == '--tensor-parallel-size': tp_size     =   int(val)
+            if key == '--max-num-seqs':         batch_size  =   int(val)
         if cos == '[client]':
-            if key == '--random-input-len':     input_size  = int(val)
-            if key == '--random-output-len':    output_size = int(val)
+            if key == '--random-input-len':     input_size  =   int(val)
+            if key == '--random-output-len':    output_size =   int(val)
+            if key == '--random-range-ratio':   range_ratio = float(val)
 
     # process metrics
 
     for line in open(log_client):
 
+        if line.startswith('Successful requests'):
+            requests_ok  = int(line.strip().split(' ')[-1])
+
+        if line.startswith('Total input tokens'):
+            total_input  = int(line.strip().split(' ')[-1])
+
+        if line.startswith('Total generated tokens'):
+            total_output = int(line.strip().split(' ')[-1])
+
         if line.startswith('Benchmark duration'):
-            total_time = float(line.strip().split(' ')[-1])
+            total_time   = float(line.strip().split(' ')[-1])
 
         if line.startswith('Median TTFT (ms)'):
             ttft = float(line.strip().split(' ')[-1])
 
         if line.startswith('Median ITL (ms)'):
-            itl = float(line.strip().split(' ')[-1])
+            itl  = float(line.strip().split(' ')[-1])
+
+        if line.startswith('Output token throughput (tok/s)'):
+            thp  = float(line.strip().split(' ')[-1])
 
     # for line in open(log_metrics):
     #
@@ -180,17 +221,23 @@ def process_server(args):
     #         prefill_sum = float(line.strip().split(' ')[-1])
     #
     # ttft = prefill_sum / reps + ( itl / 1000.0 )
+    #
+    # thp  = \
+    #     ( batch_size * ( output_size - 1 ) ) / \
+    #     ( output_size * ( itl / 1000.0 ) )
 
-    thp  = \
-        ( batch_size * ( output_size - 1 ) ) / \
-        ( output_size * ( itl / 1000.0 ) )
+    # if shapes could not be read, might be using different dataset
+    # read values from output instead
+
+    if not input_size:  input_size  = int ( total_input  / requests_ok )
+    if not output_size: output_size = int ( total_output / requests_ok )
 
     hits = [{
         'timestamp'     : time_start,
         'metadata_id'   : args.metadata_id,
         'engine'        : 'fmwork/infer/vllm',
         'model'         : model_name,
-        'precision'     : None,
+        'precision'     : args.precision,
         'input'         : input_size,
         'output'        : output_size,
         'batch'         : batch_size,
@@ -201,6 +248,9 @@ def process_server(args):
         'ttft'          : round(ttft, 3),
         'itl'           : round(itl,  1),
         'thp'           : round(thp,  1),
+        'mode'          : 'server',
+        'batch_mode'    : batch_mode,
+        'range_ratio'   : range_ratio,
     }]
 
     print(json.dumps(hits, indent=4))
