@@ -1,7 +1,5 @@
 # fmwork
 
-_Documentation in progress..._
-
 ## Engine integrations
 
 Embeddings (vectorization / encoder models)
