@@ -165,18 +165,21 @@ def process_server(args):
         if line.startswith('Benchmark duration'):
             total_time = float(line.strip().split(' ')[-1])
 
-        if line.startswith('Mean TPOT (ms)'):
+        if line.startswith('Median TTFT (ms)'):
+            ttft = float(line.strip().split(' ')[-1])
+
+        if line.startswith('Median ITL (ms)'):
             itl = float(line.strip().split(' ')[-1])
 
-    for line in open(log_metrics):
-
-        if line.startswith('vllm:request_prefill_time_seconds_count'):
-            reps = int(line.strip().split(' ')[-1].split('.')[0])
-
-        if line.startswith('vllm:request_prefill_time_seconds_sum'):
-            prefill_sum = float(line.strip().split(' ')[-1])
-
-    ttft = prefill_sum / reps + ( itl / 1000.0 )
+    # for line in open(log_metrics):
+    #
+    #     if line.startswith('vllm:request_prefill_time_seconds_count'):
+    #         reps = int(line.strip().split(' ')[-1].split('.')[0])
+    #
+    #     if line.startswith('vllm:request_prefill_time_seconds_sum'):
+    #         prefill_sum = float(line.strip().split(' ')[-1])
+    #
+    # ttft = prefill_sum / reps + ( itl / 1000.0 )
 
     thp  = \
         ( batch_size * ( output_size - 1 ) ) / \
@@ -196,7 +199,7 @@ def process_server(args):
         'warmup'        : None,
         'setup'         : None,
         'ttft'          : round(ttft, 3),
-        'itl'           : round(itl,  3),
+        'itl'           : round(itl,  1),
         'thp'           : round(thp,  1),
     }]
 
