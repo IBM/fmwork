@@ -24,12 +24,20 @@ def check_error_in_log(log_path):
         ("VMS", r"DtException: Need to find a valid memory space"),
         ("DIR", r"RuntimeError.*DDR init retried"),
         ("RPC", r"TimeoutError: RPC call to execute_model timed out\."),
+        ("PLT", r"assert prompt_len <= self\.tkv"),
+        ("CTL", r"Please reduce the length of the messages or completion"),
     ]
     
     try:
         content = open(log_path, 'r', errors='ignore').read()
         for error_code, pattern in error_patterns:
             if re.search(pattern, content):
+                # For CTL, extract the full line containing the pattern
+                if error_code == "CTL":
+                    for line in content.split('\n'):
+                        if re.search(pattern, line):
+                            return error_code, f'{error_code} | "{line.strip()}"'
+                # For other errors, use the pattern
                 return error_code, f'{error_code} | "{pattern}"'
     except Exception as e:
         return "READ_ERROR", f'READ_ERROR | "Could not read log file: {str(e)}"'
@@ -453,19 +461,32 @@ def process_server(args):
     # Determine status and notes
     status = None
     notes = []
+    is_partial = False
 
     if has_success_data:
         # Get completion info for server mode
         num_prompts, successful_requests = get_server_completion_info(args.path)
         
-        if error_code is None:
-            status = "OK"
-        else:
-            status = f"PART_{error_code}"
-            
-        # Add completion ratio to notes if available
+        # Check if it's partial execution (two conditions)
+        # Condition 1: Error detected in logs
+        if error_code is not None:
+            is_partial = True
+        
+        # Condition 2: Incomplete request completion
         if num_prompts is not None and successful_requests is not None:
             notes.append(f"successful_requests/num-prompts:{successful_requests}/{num_prompts}")
+            if successful_requests < num_prompts:
+                is_partial = True
+        
+        # Set status based on partial execution
+        if is_partial:
+            if error_code is not None:
+                status = f"PART_{error_code}"
+            else:
+                status = "PART_UNK"
+                error_msg = "UNK | \"Partial execution detected but no known error pattern found\""
+        else:
+            status = "OK"
     else:
         # Failed execution
         if error_code:
