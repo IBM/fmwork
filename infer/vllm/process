@@ -474,7 +474,8 @@ def process_server(args):
         
         # Condition 2: Incomplete request completion
         if num_prompts is not None and successful_requests is not None:
-            notes.append(f"successful_requests/num-prompts:{successful_requests}/{num_prompts}")
+            notes.append(f"successful_requests:{successful_requests}")
+            notes.append(f"num-prompts:{num_prompts}")
             if successful_requests < num_prompts:
                 is_partial = True
         
