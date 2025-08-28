@@ -245,5 +245,12 @@ fi
 
 echo "time_end   $(date "+%s.%N")" >> ${odir}/runner.log
 
-echo
+# Add server log to runner log if in server mode and server.log exists
+if [[ ${mode} == server ]] && [[ -f ${odir}/server.log ]]; then
+    echo
+    echo "Adding server log to runner log..."
+    echo >> ${odir}/runner.log
+    cat ${odir}/server.log |& tee -a ${odir}/runner.log
+fi
 
+echo
