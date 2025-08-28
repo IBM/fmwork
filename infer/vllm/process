@@ -323,14 +323,30 @@ def process_server(args):
                 time_end   = line.strip().split(' ')[-1]
 
     # get opts from server command and client command (if exists)
-    line = open(cmd_server).read().strip()
-    for s in line.split('--')[1:]:
+    server_cmd_content = open(cmd_server).read().strip()
+    for s in server_cmd_content.split('--')[1:]:
         opts.append('[server] --' + s.strip())
 
     if os.path.exists(cmd_client):
         line = open(cmd_client).read().strip()
         for s in line.split('--')[1:]:
             opts.append('[client] --' + s.strip())
+
+    # Extract warmup parameters from server.cmd
+    if 'VLLM_SPYRE_WARMUP_PROMPT_LENS=' in server_cmd_content:
+        match = re.search(r'VLLM_SPYRE_WARMUP_PROMPT_LENS=(\d+)', server_cmd_content)
+        if match and input_size is None:
+            input_size = int(match.group(1))
+    
+    if 'VLLM_SPYRE_WARMUP_NEW_TOKENS=' in server_cmd_content:
+        match = re.search(r'VLLM_SPYRE_WARMUP_NEW_TOKENS=(\d+)', server_cmd_content)
+        if match and output_size is None:
+            output_size = int(match.group(1))
+    
+    if 'VLLM_SPYRE_WARMUP_BATCH_SIZES=' in server_cmd_content:
+        match = re.search(r'VLLM_SPYRE_WARMUP_BATCH_SIZES=(\d+)', server_cmd_content)
+        if match and batch_size is None:
+            batch_size = int(match.group(1))
 
     # read environment variables looking for meaningful information
     batch_mode = 'static'
@@ -361,6 +377,7 @@ def process_server(args):
             # Try to extract model from server.cmd as backup
             if key == '--model' and not model_name:
                 model_name = val
+                    
         if cos == '[client]' and os.path.exists(cmd_client):
             if key == '--random-input-len':     input_size  =   int(val)
             if key == '--random-output-len':    output_size =   int(val)
