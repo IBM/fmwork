@@ -332,21 +332,7 @@ def process_server(args):
         for s in line.split('--')[1:]:
             opts.append('[client] --' + s.strip())
 
-    # Extract warmup parameters from server.cmd
-    if 'VLLM_SPYRE_WARMUP_PROMPT_LENS=' in server_cmd_content:
-        match = re.search(r'VLLM_SPYRE_WARMUP_PROMPT_LENS=(\d+)', server_cmd_content)
-        if match and input_size is None:
-            input_size = int(match.group(1))
-    
-    if 'VLLM_SPYRE_WARMUP_NEW_TOKENS=' in server_cmd_content:
-        match = re.search(r'VLLM_SPYRE_WARMUP_NEW_TOKENS=(\d+)', server_cmd_content)
-        if match and output_size is None:
-            output_size = int(match.group(1))
-    
-    if 'VLLM_SPYRE_WARMUP_BATCH_SIZES=' in server_cmd_content:
-        match = re.search(r'VLLM_SPYRE_WARMUP_BATCH_SIZES=(\d+)', server_cmd_content)
-        if match and batch_size is None:
-            batch_size = int(match.group(1))
+
 
     # read environment variables looking for meaningful information
     batch_mode = 'static'
@@ -365,23 +351,51 @@ def process_server(args):
     tp_size     = None
     range_ratio = 0.0
 
-    for opt in opts:
-        split = opt.split(' ')
-        cos   = split[0]
-        key   = split[1]
-        val   = ' '.join(split[2:])
+    # Extract warmup parameters directly from server.cmd content first
+    warmup_prompt_match = re.search(r'VLLM_SPYRE_WARMUP_PROMPT_LENS=(\d+)', server_cmd_content)
+    if warmup_prompt_match:
+        input_size = int(warmup_prompt_match.group(1))
+    
+    warmup_tokens_match = re.search(r'VLLM_SPYRE_WARMUP_NEW_TOKENS=(\d+)', server_cmd_content)
+    if warmup_tokens_match:
+        output_size = int(warmup_tokens_match.group(1))
+    
+    warmup_batch_match = re.search(r'VLLM_SPYRE_WARMUP_BATCH_SIZES=(\d+)', server_cmd_content)
+    if warmup_batch_match:
+        batch_size = int(warmup_batch_match.group(1))
+    
+    # Extract other server parameters from server.cmd
+    max_num_seqs_match = re.search(r'--max-num-seqs\s+(\d+)', server_cmd_content)
+    if max_num_seqs_match and batch_size is None:
+        batch_size = int(max_num_seqs_match.group(1))
+    
+    tensor_parallel_match = re.search(r'--tensor-parallel-size\s+(\d+)', server_cmd_content)
+    if tensor_parallel_match:
+        tp_size = int(tensor_parallel_match.group(1))
+    
+    # Extract model from server.cmd as backup
+    if not model_name:
+        model_match = re.search(r'--model\s+(\S+)', server_cmd_content)
+        if model_match:
+            model_name = model_match.group(1)
 
-        if cos == '[server]':
-            if key == '--tensor-parallel-size': tp_size     =   int(val)
-            if key == '--max-num-seqs':         batch_size  =   int(val)
-            # Try to extract model from server.cmd as backup
-            if key == '--model' and not model_name:
-                model_name = val
-                    
-        if cos == '[client]' and os.path.exists(cmd_client):
-            if key == '--random-input-len':     input_size  =   int(val)
-            if key == '--random-output-len':    output_size =   int(val)
-            if key == '--random-range-ratio':   range_ratio = float(val)
+    # Extract client parameters from client.cmd if exists
+    if os.path.exists(cmd_client):
+        client_cmd_content = open(cmd_client).read().strip()
+        
+        random_input_match = re.search(r'--random-input-len\s+(\d+)', client_cmd_content)
+        if random_input_match:
+            input_size = int(random_input_match.group(1))
+        
+        random_output_match = re.search(r'--random-output-len\s+(\d+)', client_cmd_content)
+        if random_output_match:
+            output_size = int(random_output_match.group(1))
+        
+        random_range_match = re.search(r'--random-range-ratio\s+([\d.]+)', client_cmd_content)
+        if random_range_match:
+            range_ratio = float(random_range_match.group(1))
+
+
 
     # Initialize default values for metrics
     ttft = None
