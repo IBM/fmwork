@@ -56,6 +56,15 @@ def extract_model_version(parsed_model, input_model):
     
     return None
 
+def determine_precision(model_name, default_precision):
+    """
+    Determine precision based on model name.
+    If model name contains 'fp8' (case insensitive), return 'fp8', otherwise return default.
+    """
+    if model_name and 'fp8' in model_name.lower():
+        return 'fp8'
+    return default_precision
+
 def get_server_completion_info(args_path):
 
     cmd_client = os.path.join(args_path, 'client.cmd')
@@ -507,13 +516,16 @@ def process_server(args):
         model_version = None
         final_model_name = model_name
 
+    # Determine precision based on model name
+    final_precision = determine_precision(model_name, args.precision)
+
     hits = [{
         'timestamp'     : time_start,
         'metadata_id'   : args.metadata_id,
         'engine'        : 'fmwork/infer/vllm',
         'model'         : final_model_name,
         'model_version' : model_version,
-        'precision'     : args.precision,
+        'precision'     : final_precision,
         'input'         : input_size,
         'output'        : output_size,
         'batch'         : batch_size,
