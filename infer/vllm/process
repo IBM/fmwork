@@ -26,6 +26,8 @@ def check_error_in_log(log_path):
         ("RPC", r"TimeoutError: RPC call to execute_model timed out\."),
         ("PLT", r"assert prompt_len <= self\.tkv"),
         ("CTL", r"Please reduce the length of the messages or completion"),
+        ("REQ", r"assert req_index is not None"),
+        ("CGF", r"Failed to compile graphs: compile_graph failed"),
     ]
     
     try:
