@@ -183,6 +183,10 @@ echo "terminating server ..." >> ${odir}/server.log
 kill -2 ${vllm_server_pid}
 kill -2 ${server_pid}
 
+if [[ -f ${odir}/server.log ]]; then
+    cat ${odir}/server.log
+fi
+
 }
 
 # ==============================================================================
@@ -246,4 +250,3 @@ fi
 echo "time_end   $(date "+%s.%N")" >> ${odir}/runner.log
 
 echo
-
