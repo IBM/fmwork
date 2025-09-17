@@ -165,7 +165,7 @@ vllm_server_pid=$(\
     grep "Started server process" ${odir}/server.log |\
     grep -o '[0-9]\+')
 
-cmd="${SDIR}/${client} --model ${model}"
+cmd="${SDIR}/${client} --model ${model} --odir ${odir}"
 
 echo
 echo ${cmd}     &> ${odir}/client.cmd
@@ -180,8 +180,8 @@ sleep 1
 echo                          >> ${odir}/server.log
 echo "terminating server ..." >> ${odir}/server.log
 
-kill -2 ${vllm_server_pid}
-kill -2 ${server_pid}
+kill -2 ${vllm_server_pid} &> /dev/null
+kill -2 ${server_pid}      &> /dev/null
 
 if [[ -f ${odir}/server.log ]]; then
     cat ${odir}/server.log

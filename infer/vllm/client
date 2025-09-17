@@ -6,7 +6,9 @@ args=()
 while [[ ${#} -gt 0 ]]; do
     arg=${1}; case ${arg} in
         -m | --model ) shift; model=${1}     ;;
+        -o | --odir  ) shift; odir=${1}      ;;
         -e | --env   ) shift; envs+=("${1}") ;;
+             --multi ) shift; multi=${1}     ;;
          *           )        args+=("${1}") ;;
     esac; shift
 done
@@ -24,6 +26,11 @@ for keyval in ${envs[@]}; do
     fi
 done
 
+# multi-runs is off; usual / single run
+# -------------------------------------
+
+if [[ -z "${multi}" ]]; then
+
 cmd="
 vllm bench serve
     --model ${model}
@@ -36,4 +43,56 @@ echo
 echo ${cmd}
 echo
 eval ${cmd}
+
+# multi-runs enabled!
+# -------------------
+
+else
+
+instance=0
+
+for combo in ${multi//,/ }; do
+
+ii=$(echo ${combo} | cut -d / -f 1)
+oo=$(echo ${combo} | cut -d / -f 2)
+bb=$(echo ${combo} | cut -d / -f 3)
+rr=$(echo ${combo} | cut -d / -f 4)
+
+{
+
+cmd="
+vllm bench serve
+    --model ${model}
+    ${args[*]}
+    --dataset-name random
+    --random-input-len  ${ii}
+    --random-output-len ${oo}
+    --max-concurrency   ${bb}
+    --num-prompts       ${rr}
+"
+
+echo "$(date) -- starting ${instance}"
+
+echo        &>> ${odir}/client.log.${instance}
+echo ${cmd} &>> ${odir}/client.log.${instance}
+echo        &>> ${odir}/client.log.${instance}
+eval ${cmd} &>> ${odir}/client.log.${instance}
+
+echo "$(date) -- finished ${instance}"
+
+} &
+
+instance=$(( instance + 1 ))
+
+done
+
+echo "$(date) -- clients started; waiting for completion ..."
+
+wait
+
+echo "$(date) -- all done!"
+
+sleep 4
+
+fi
 
