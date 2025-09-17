@@ -26,6 +26,8 @@ def check_error_in_log(log_path):
         ("RPC", r"TimeoutError: RPC call to execute_model timed out\."),
         ("PLT", r"assert prompt_len <= self\.tkv"),
         ("CTL", r"Please reduce the length of the messages or completion"),
+        ("REQ", r"assert req_index is not None"),
+        ("CGF", r"Failed to compile graphs: compile_graph failed"),
     ]
     
     try:
@@ -51,6 +53,43 @@ def extract_model_version(parsed_model, input_model):
     
     if parsed_model.startswith(input_model + '/'):
         return parsed_model[len(input_model) + 1:]
+    
+    return None
+
+def determine_precision(model_name, default_precision):
+
+    if model_name and 'fp8' in model_name.lower():
+        return 'fp8'
+    return default_precision
+
+def extract_context_length_direct(log_driver):
+
+    if not os.path.exists(log_driver):
+        return None
+    
+    try:
+        for line in open(log_driver, errors='ignore'):
+            if line.startswith('FMWORK ARG') and '--engine:max_model_len@' in line:
+                match = re.search(r'--engine:max_model_len@\s*(\d+)', line)
+                if match:
+                    return int(match.group(1))
+    except Exception:
+        pass
+    
+    return None
+
+def extract_context_length_server(cmd_server):
+
+    if not os.path.exists(cmd_server):
+        return None
+    
+    try:
+        content = open(cmd_server).read()
+        match = re.search(r'--max-model-len\s+(\d+)', content)
+        if match:
+            return int(match.group(1))
+    except Exception:
+        pass
     
     return None
 
@@ -223,17 +262,26 @@ def process_direct(args):
                 model_version = None
                 final_model_name = model_name
 
+            # Determine precision based on model name
+            final_precision = determine_precision(model_name, args.precision)
+
+            # Determine context length
+            context_length = extract_context_length_direct(log_driver)
+            if context_length is None and input_size is not None and output_size is not None:
+                context_length = input_size + output_size
+
             hits.append({
                 'timestamp'     : time_start,
                 'metadata_id'   : args.metadata_id,
                 'engine'        : 'fmwork/infer/vllm',
                 'model'         : final_model_name,
                 'model_version' : model_version,
-                'precision'     : args.precision,
+                'precision'     : final_precision,
                 'input'         : input_size,
                 'output'        : output_size,
                 'batch'         : batch_size,
                 'tp'            : tp_size,
+                'context_length': context_length,
                 'opts'          : opts,
                 'warmup'        : round(warmup, 3) if warmup is not None else None,
                 'setup'         : setup,
@@ -265,17 +313,26 @@ def process_direct(args):
             model_version = None
             final_model_name = model_name
         
+        # Determine precision based on model name
+        final_precision = determine_precision(model_name, args.precision)
+        
+        # Determine context length
+        context_length = extract_context_length_direct(log_driver)
+        if context_length is None and input_size is not None and output_size is not None:
+            context_length = input_size + output_size
+        
         hits.append({
             'timestamp'     : None,
             'metadata_id'   : args.metadata_id,
             'engine'        : 'fmwork/infer/vllm',
             'model'         : final_model_name,
             'model_version' : model_version,
-            'precision'     : args.precision,
+            'precision'     : final_precision,
             'input'         : input_size,
             'output'        : output_size,
             'batch'         : batch_size,
             'tp'            : tp_size,
+            'context_length': context_length,
             'opts'          : opts,
             'warmup'        : None,
             'setup'         : setup,
@@ -505,17 +562,26 @@ def process_server(args):
         model_version = None
         final_model_name = model_name
 
+    # Determine precision based on model name
+    final_precision = determine_precision(model_name, args.precision)
+
+    # Determine context length
+    context_length = extract_context_length_server(cmd_server)
+    if context_length is None and input_size is not None and output_size is not None:
+        context_length = input_size + output_size
+
     hits = [{
         'timestamp'     : time_start,
         'metadata_id'   : args.metadata_id,
         'engine'        : 'fmwork/infer/vllm',
         'model'         : final_model_name,
         'model_version' : model_version,
-        'precision'     : args.precision,
+        'precision'     : final_precision,
         'input'         : input_size,
         'output'        : output_size,
         'batch'         : batch_size,
         'tp'            : tp_size,
+        'context_length': context_length,
         'opts'          : opts,
         'warmup'        : None,
         'setup'         : None,
