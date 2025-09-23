@@ -6,6 +6,24 @@ import os
 import re
 import sys
 import traceback
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from prometheus_metrics import (
+    get_cpu_metrics,
+    get_memory_metrics,
+    QueryFunction,
+    THANOS_API_TOKEN,
+    THANOS_API_URL
+)
+
+
+### CONSTANTS
+STEP = "5m" # Representing query resolution step width
+PROM_QUERY_METRICS = [QueryFunction.AVG, QueryFunction.MAX]
+PODNAME_ENV_VAR_NAME = "HOSTNAME"
+
+RUNNER_POD_NAME = os.getenv(PODNAME_ENV_VAR_NAME)
 
 class fmwork:
     class Exception(Exception):
@@ -15,11 +33,11 @@ def check_error_in_log(log_path):
 
     if not os.path.exists(log_path):
         return None, None
-    
+
     error_patterns = [
         ("OOR", r"terminate called after throwing an instance of 'std::out_of_range'"),
         ("MFS", r"DtException: Must find space in DDR"),
-        ("UMG", r"DtException: Unable to map graph within architecture constraints"), 
+        ("UMG", r"DtException: Unable to map graph within architecture constraints"),
         ("PVF", r"DtException: Program verification failed"),
         ("VMS", r"DtException: Need to find a valid memory space"),
         ("DIR", r"RuntimeError.*DDR init retried"),
@@ -29,7 +47,7 @@ def check_error_in_log(log_path):
         ("REQ", r"assert req_index is not None"),
         ("CGF", r"Failed to compile graphs: compile_graph failed"),
     ]
-    
+
     try:
         content = open(log_path, 'r', errors='ignore').read()
         for error_code, pattern in error_patterns:
@@ -43,17 +61,17 @@ def check_error_in_log(log_path):
                 return error_code, f'{error_code} | "{pattern}"'
     except Exception as e:
         return "READ_ERROR", f'READ_ERROR | "Could not read log file: {str(e)}"'
-    
+
     return None, None
 
 def extract_model_version(parsed_model, input_model):
 
     if not parsed_model or not input_model:
         return None
-    
+
     if parsed_model.startswith(input_model + '/'):
         return parsed_model[len(input_model) + 1:]
-    
+
     return None
 
 def determine_precision(model_name, default_precision):
@@ -66,7 +84,7 @@ def extract_context_length_direct(log_driver):
 
     if not os.path.exists(log_driver):
         return None
-    
+
     try:
         for line in open(log_driver, errors='ignore'):
             if line.startswith('FMWORK ARG') and '--engine:max_model_len@' in line:
@@ -75,14 +93,14 @@ def extract_context_length_direct(log_driver):
                     return int(match.group(1))
     except Exception:
         pass
-    
+
     return None
 
 def extract_context_length_server(cmd_server):
 
     if not os.path.exists(cmd_server):
         return None
-    
+
     try:
         content = open(cmd_server).read()
         match = re.search(r'--max-model-len\s+(\d+)', content)
@@ -90,17 +108,17 @@ def extract_context_length_server(cmd_server):
             return int(match.group(1))
     except Exception:
         pass
-    
+
     return None
 
 def get_server_completion_info(args_path):
 
     cmd_client = os.path.join(args_path, 'client.cmd')
     log_client = os.path.join(args_path, 'client.log')
-    
+
     num_prompts = None
     successful_requests = None
-    
+
     if os.path.exists(cmd_client):
         try:
             content = open(cmd_client, 'r').read()
@@ -109,7 +127,7 @@ def get_server_completion_info(args_path):
                 num_prompts = int(match.group(1))
         except Exception:
             pass
-    
+
     if os.path.exists(log_client):
         try:
             for line in open(log_client, 'r'):
@@ -118,7 +136,7 @@ def get_server_completion_info(args_path):
                     break
         except Exception:
             pass
-    
+
     return num_prompts, successful_requests
 
 def main():
@@ -129,7 +147,13 @@ def main():
     parser.add('--precision',    type=str, default='fp16')
     parser.add('--metadata_id',  type=str)
     parser.add('--model',        type=str, help='Expected model name for version extraction')
+    parser.add('--enable_prom_metrics', action='store_true', help="Enable prometheus metrics collection")
     args = parser.parse_args()
+
+    if args.enable_prom_metrics and not THANOS_API_TOKEN:
+        raise fmwork.Exception(
+            "THANOS_API_TOKEN not set"
+        )
 
     if os.path.isdir(args.path):
         if os.path.exists(os.path.join(args.path, 'server.log')):
@@ -163,7 +187,7 @@ def process_direct(args):
 
     # Check for errors in driver.log
     error_code, error_msg = check_error_in_log(log_driver)
-    
+
     # Determine if execution was successful (has FMWORK GEN entries)
     has_success_data = False
 
@@ -186,20 +210,20 @@ def process_direct(args):
         if line.startswith('FMWORK ARG'):
 
             opts.append(line.strip()[11:])
-            
+
             # Parse FMWORK ARG parameters for direct mode (backup values)
             arg_line = line.strip()[11:]  # Remove "FMWORK ARG "
             parts = arg_line.split()
             if len(parts) >= 2:
                 key = parts[0]
                 val = ' '.join(parts[1:])
-                
+
                 if key == '--batch_sizes':
                     try:
                         batch_size = int(val)
                     except ValueError:
                         pass
-                elif key == '--input_sizes': 
+                elif key == '--input_sizes':
                     try:
                         input_size = int(val)
                     except ValueError:
@@ -216,7 +240,7 @@ def process_direct(args):
                         tp_size = int(val)
                     except ValueError:
                         pass
-                
+
                 # Always check for model_name
                 if key == '--model_name':
                     model_name = val
@@ -251,7 +275,7 @@ def process_direct(args):
                 status = "OK"
             else:
                 status = f"PART_{error_code}"
-                
+
             notes = []
 
             # Apply --model parameter processing after parsing
@@ -304,7 +328,7 @@ def process_direct(args):
             status = "ERR_UNKNOWN"
             if not error_msg:
                 error_msg = "UNKNOWN | \"No success data and no identifiable error\""
-        
+
         # Apply --model parameter processing after parsing
         if args.model:
             model_version = extract_model_version(model_name, args.model)
@@ -312,15 +336,15 @@ def process_direct(args):
         else:
             model_version = None
             final_model_name = model_name
-        
+
         # Determine precision based on model name
         final_precision = determine_precision(model_name, args.precision)
-        
+
         # Determine context length
         context_length = extract_context_length_direct(log_driver)
         if context_length is None and input_size is not None and output_size is not None:
             context_length = input_size + output_size
-        
+
         hits.append({
             'timestamp'     : None,
             'metadata_id'   : args.metadata_id,
@@ -358,13 +382,14 @@ def process_server(args):
     log_client  = os.path.join(args.path, 'client.log')
     log_metrics = os.path.join(args.path, 'metrics.log')
 
+
     # Check required files for server mode
     required_files = [cmd_server, log_server]
     for path in required_files:
         if not os.path.exists(path):
             raise fmwork.Exception(
                 f'Could not find {path}.')
-    
+
     # Optional files for successful runs
     optional_files = [cmd_client, log_client, log_metrics]
 
@@ -377,6 +402,7 @@ def process_server(args):
     model_name = None
     time_start = None
     time_end = None
+    prom_metrics = {}
 
     if os.path.exists(log_runner):
         for line in open(log_runner):
@@ -386,6 +412,45 @@ def process_server(args):
                 time_start = line.strip().split(' ')[-1]
             if line.startswith('time_end' ):
                 time_end   = line.strip().split(' ')[-1]
+
+    if args.enable_prom_metrics:
+        if not time_start or not time_end:
+            raise fmwork.Exception(
+                "time_start or time_end are None"
+            )
+
+        start_timestamp = datetime.fromtimestamp(float(time_start), ZoneInfo('UTC'))
+        end_timestamp = datetime.fromtimestamp(float(time_end), ZoneInfo('UTC'))
+        if not RUNNER_POD_NAME:
+            raise fmwork.Exception(
+                "HOSTNAME env variable missing"
+            )
+        # Collect prometheus metrics
+        pod_label_config = f'{{pod="{RUNNER_POD_NAME}", container!=""}}'
+
+
+        for query_fn in PROM_QUERY_METRICS:
+            # NOTE: Time has to be in epoch
+            cpu_metrics = get_cpu_metrics(
+                THANOS_API_URL,
+                pod_label_config,
+                start_timestamp,
+                end_timestamp,
+                query_fn=query_fn
+            )
+            memory_metrics = get_memory_metrics(
+                THANOS_API_URL,
+                pod_label_config,
+                start_timestamp,
+                end_timestamp,
+                query_fn=query_fn
+            )
+            prom_metrics[query_fn.value] = {
+                "cpu": cpu_metrics,
+                "memory": memory_metrics
+            }
+
+
 
     # get opts from server command and client command (if exists)
     server_cmd_content = open(cmd_server).read().strip()
@@ -420,24 +485,24 @@ def process_server(args):
     warmup_prompt_match = re.search(r'VLLM_SPYRE_WARMUP_PROMPT_LENS=(\d+)', server_cmd_content)
     if warmup_prompt_match:
         input_size = int(warmup_prompt_match.group(1))
-    
+
     warmup_tokens_match = re.search(r'VLLM_SPYRE_WARMUP_NEW_TOKENS=(\d+)', server_cmd_content)
     if warmup_tokens_match:
         output_size = int(warmup_tokens_match.group(1))
-    
+
     warmup_batch_match = re.search(r'VLLM_SPYRE_WARMUP_BATCH_SIZES=(\d+)', server_cmd_content)
     if warmup_batch_match:
         batch_size = int(warmup_batch_match.group(1))
-    
+
     # Extract other server parameters from server.cmd
     max_num_seqs_match = re.search(r'--max-num-seqs\s+(\d+)', server_cmd_content)
     if max_num_seqs_match and batch_size is None:
         batch_size = int(max_num_seqs_match.group(1))
-    
+
     tensor_parallel_match = re.search(r'--tensor-parallel-size\s+(\d+)', server_cmd_content)
     if tensor_parallel_match:
         tp_size = int(tensor_parallel_match.group(1))
-    
+
     # Extract model from server.cmd as backup
     if not model_name:
         model_match = re.search(r'--model\s+(\S+)', server_cmd_content)
@@ -447,15 +512,15 @@ def process_server(args):
     # Extract client parameters from client.cmd if exists
     if os.path.exists(cmd_client):
         client_cmd_content = open(cmd_client).read().strip()
-        
+
         random_input_match = re.search(r'--random-input-len\s+(\d+)', client_cmd_content)
         if random_input_match:
             input_size = int(random_input_match.group(1))
-        
+
         random_output_match = re.search(r'--random-output-len\s+(\d+)', client_cmd_content)
         if random_output_match:
             output_size = int(random_output_match.group(1))
-        
+
         random_range_match = re.search(r'--random-range-ratio\s+([\d.]+)', client_cmd_content)
         if random_range_match:
             range_ratio = float(random_range_match.group(1))
@@ -465,7 +530,8 @@ def process_server(args):
     # Initialize default values for metrics
     ttft = None
     itl = None
-    thp = None
+    thp = None # output token throughput
+    req_thp = None
     requests_ok = None
     total_input = None
     total_output = None
@@ -501,14 +567,18 @@ def process_server(args):
                 if line.startswith('Output token throughput (tok/s)'):
                     thp  = float(line.strip().split(' ')[-1])
 
+                if line.startswith('Request throughput (req/s)'):
+                    req_thp  = float(line.strip().split(' ')[-1])
+
+
             # if shapes could not be read, might be using different dataset
             # read values from output instead
             if requests_ok and requests_ok > 0:
-                if not input_size and total_input:  
+                if not input_size and total_input:
                     input_size  = int(total_input  / requests_ok)
-                if not output_size and total_output: 
+                if not output_size and total_output:
                     output_size = int(total_output / requests_ok)
-                    
+
         except Exception as e:
             # If we can't process metrics due to error, set error info
             if not error_code:
@@ -523,19 +593,19 @@ def process_server(args):
     if has_success_data:
         # Get completion info for server mode
         num_prompts, successful_requests = get_server_completion_info(args.path)
-        
+
         # Check if it's partial execution (two conditions)
         # Condition 1: Error detected in logs
         if error_code is not None:
             is_partial = True
-        
+
         # Condition 2: Incomplete request completion
         if num_prompts is not None and successful_requests is not None:
             notes.append(f"successful_requests:{successful_requests}")
             notes.append(f"num-prompts:{num_prompts}")
             if successful_requests < num_prompts:
                 is_partial = True
-        
+
         # Set status based on partial execution
         if is_partial:
             if error_code is not None:
@@ -588,12 +658,14 @@ def process_server(args):
         'ttft'          : round(ttft, 3) if ttft is not None else None,
         'itl'           : round(itl,  1) if itl is not None else None,
         'thp'           : round(thp,  1) if thp is not None else None,
+        'req_thp'       : round(req_thp, 3) if req_thp is not None else None,
         'mode'          : 'server',
         'batch_mode'    : batch_mode,
         'range_ratio'   : range_ratio,
         'status'        : status,
         'error_msg'     : error_msg,
         'notes'         : notes,
+        'prom_metrics'  : prom_metrics if prom_metrics and args.enable_prom_metrics else None,
     }]
 
     print(json.dumps(hits, indent=4))
