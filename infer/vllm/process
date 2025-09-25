@@ -413,44 +413,6 @@ def process_server(args):
             if line.startswith('time_end' ):
                 time_end   = line.strip().split(' ')[-1]
 
-    if args.enable_prom_metrics:
-        if not time_start or not time_end:
-            raise fmwork.Exception(
-                "time_start or time_end are None"
-            )
-
-        start_timestamp = datetime.fromtimestamp(float(time_start), ZoneInfo('UTC'))
-        end_timestamp = datetime.fromtimestamp(float(time_end), ZoneInfo('UTC'))
-        if not RUNNER_POD_NAME:
-            raise fmwork.Exception(
-                "HOSTNAME env variable missing"
-            )
-        # Collect prometheus metrics
-        pod_label_config = f'{{pod="{RUNNER_POD_NAME}", container!=""}}'
-
-
-        for query_fn in PROM_QUERY_METRICS:
-            # NOTE: Time has to be in epoch
-            cpu_metrics = get_cpu_metrics(
-                THANOS_API_URL,
-                pod_label_config,
-                start_timestamp,
-                end_timestamp,
-                query_fn=query_fn
-            )
-            memory_metrics = get_memory_metrics(
-                THANOS_API_URL,
-                pod_label_config,
-                start_timestamp,
-                end_timestamp,
-                query_fn=query_fn
-            )
-            prom_metrics[query_fn.value] = {
-                "cpu": cpu_metrics,
-                "memory": memory_metrics
-            }
-
-
 
     # get opts from server command and client command (if exists)
     server_cmd_content = open(cmd_server).read().strip()
@@ -542,6 +504,8 @@ def process_server(args):
 
     # Only process metrics if we have success data
     if has_success_data:
+        client_start_time = None
+        client_end_time = None
         # process metrics
         try:
             for line in open(log_client):
@@ -570,6 +534,11 @@ def process_server(args):
                 if line.startswith('Request throughput (req/s)'):
                     req_thp  = float(line.strip().split(' ')[-1])
 
+                if line.startswith('client_time_start:'):
+                    client_start_time  = float(line.strip().split(':')[-1])
+
+                if line.startswith('client_time_end:'):
+                    client_end_time  = float(line.strip().split(':')[-1])
 
             # if shapes could not be read, might be using different dataset
             # read values from output instead
@@ -578,6 +547,42 @@ def process_server(args):
                     input_size  = int(total_input  / requests_ok)
                 if not output_size and total_output:
                     output_size = int(total_output / requests_ok)
+
+            if args.enable_prom_metrics:
+                if not client_start_time or not client_end_time:
+                    raise fmwork.Exception(
+                        "client_time_start or client_time_end are None"
+                    )
+
+                start_timestamp = datetime.fromtimestamp(client_start_time, ZoneInfo('UTC'))
+                end_timestamp = datetime.fromtimestamp(client_end_time, ZoneInfo('UTC'))
+                if not RUNNER_POD_NAME:
+                    raise fmwork.Exception(
+                        "HOSTNAME env variable missing"
+                    )
+                # Collect prometheus metrics
+                pod_label_config = f'{{pod="{RUNNER_POD_NAME}", container!=""}}'
+
+                for query_fn in PROM_QUERY_METRICS:
+                    # NOTE: Time has to be in epoch
+                    cpu_metrics = get_cpu_metrics(
+                        THANOS_API_URL,
+                        pod_label_config,
+                        start_timestamp,
+                        end_timestamp,
+                        query_fn=query_fn
+                    )
+                    memory_metrics = get_memory_metrics(
+                        THANOS_API_URL,
+                        pod_label_config,
+                        start_timestamp,
+                        end_timestamp,
+                        query_fn=query_fn
+                    )
+                    prom_metrics[query_fn.value] = {
+                        "cpu": cpu_metrics,
+                        "memory": memory_metrics
+                    }
 
         except Exception as e:
             # If we can't process metrics due to error, set error info

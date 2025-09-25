@@ -37,7 +37,7 @@ class QueryFunction(Enum):
     MAX = "max_over_time"
 
 
-def get_pod_metrics_at_timestamp(prometheus_url, labels, start_time, end_time, metric_name=None, query_fn=QueryFunction.AVG) -> Dict[str, Any]:
+def get_pod_metrics_at_timestamp(prometheus_url, start_time, end_time, query=None, metric_name=None) -> Dict[str, Any]:
     """
     Collects a specific Prometheus metric for a given pod at a specified timestamp.
 
@@ -56,19 +56,16 @@ def get_pod_metrics_at_timestamp(prometheus_url, labels, start_time, end_time, m
         ValueError: If metric_name is not specified.
     """
 
-    if metric_name is None:
+    if query is None:
         raise ValueError("Metric name must be specified")
 
     try:
         headers = {"Authorization": f"Bearer {THANOS_API_TOKEN}"}
         prom = PrometheusConnect(url=prometheus_url, headers=headers)
 
-        # Construct the query string
-        query = f'{query_fn.value}({metric_name}{labels}[{STEP}])'
-        # print(query)
-
         # Execute the query
         result = prom.custom_query_range(query=query, start_time=start_time, end_time=end_time, step=STEP)
+
 
         if result:
             return result  # Return the result as-is
@@ -119,10 +116,13 @@ def get_cpu_metrics(prometheus_url: str, pod_label_config: str, start_time, end_
     Returns:
         Optinal(dict)
     """
-    METRIC_NAME = "container_cpu_user_seconds_total"
+    METRIC_NAME = "container_cpu_usage_seconds_total"
+
+
+    query = f'rate({METRIC_NAME}{pod_label_config}[{STEP}])'
 
     # Fetch the metric data for the given pod, namespace, and time range
-    metric_data = get_pod_metrics_at_timestamp(prometheus_url, pod_label_config, start_time, end_time, metric_name=METRIC_NAME, query_fn=query_fn)
+    metric_data = get_pod_metrics_at_timestamp(prometheus_url, start_time, end_time, metric_name=METRIC_NAME, query=query)
 
     metric_collection = None
     if metric_data:
@@ -178,7 +178,10 @@ def get_memory_metrics(prometheus_url: str, pod_label_config, start_time, end_ti
 
     metric_collection = None
 
-    metric_data = get_pod_metrics_at_timestamp(prometheus_url, pod_label_config, start_time, end_time, metric_name=METRIC_NAME, query_fn=query_fn)
+    query = f'{query_fn.value}({METRIC_NAME}{pod_label_config}[{STEP}])'
+    # Fetch the metric data for the given pod, namespace, and time range
+    metric_data = get_pod_metrics_at_timestamp(prometheus_url, start_time, end_time, metric_name=METRIC_NAME, query=query)
+
     if metric_data:
 
         mem_bytes_list = []
