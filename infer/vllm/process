@@ -9,21 +9,10 @@ import traceback
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from prometheus_metrics import (
-    get_cpu_metrics,
-    get_memory_metrics,
-    QueryFunction,
-    THANOS_API_TOKEN,
-    THANOS_API_URL
-)
-
 
 ### CONSTANTS
-STEP = "5m" # Representing query resolution step width
-PROM_QUERY_METRICS = [QueryFunction.AVG, QueryFunction.MAX]
 PODNAME_ENV_VAR_NAME = "HOSTNAME"
 
-RUNNER_POD_NAME = os.getenv(PODNAME_ENV_VAR_NAME)
 
 class fmwork:
     class Exception(Exception):
@@ -149,11 +138,6 @@ def main():
     parser.add('--model',        type=str, help='Expected model name for version extraction')
     parser.add('--enable_prom_metrics', action='store_true', help="Enable prometheus metrics collection")
     args = parser.parse_args()
-
-    if args.enable_prom_metrics and not THANOS_API_TOKEN:
-        raise fmwork.Exception(
-            "THANOS_API_TOKEN not set"
-        )
 
     if os.path.isdir(args.path):
         if os.path.exists(os.path.join(args.path, 'server.log')):
@@ -402,7 +386,7 @@ def process_server(args):
     model_name = None
     time_start = None
     time_end = None
-    prom_metrics = {}
+    prom_metrics = None
 
     if os.path.exists(log_runner):
         for line in open(log_runner):
@@ -549,6 +533,27 @@ def process_server(args):
                     output_size = int(total_output / requests_ok)
 
             if args.enable_prom_metrics:
+
+                # import related functions
+                from prometheus_metrics import (
+                    QueryFunction,
+                    THANOS_API_TOKEN,
+                    THANOS_API_URL,
+                    get_cpu_metrics,
+                    get_memory_metrics
+                )
+
+                PROM_QUERY_METRICS = [QueryFunction.AVG, QueryFunction.MAX]
+
+                RUNNER_POD_NAME = os.getenv(PODNAME_ENV_VAR_NAME)
+
+                if not THANOS_API_TOKEN:
+                    raise fmwork.Exception(
+                        "THANOS_API_TOKEN not set"
+                    )
+
+                prom_metrics = {}
+
                 if not client_start_time or not client_end_time:
                     raise fmwork.Exception(
                         "client_time_start or client_time_end are None"
