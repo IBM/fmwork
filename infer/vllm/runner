@@ -238,7 +238,7 @@ cd ${wdir}
 
 echo "model_root ${model_root}"    >> ${odir}/runner.log
 echo "model_name ${model_name}"    >> ${odir}/runner.log
-echo "time_start $(date "+%s.%N")" >> ${odir}/runner.log
+echo "time_start $(date -u "+%s.%N")" >> ${odir}/runner.log
 
 if   [[ ${mode} == direct ]]; then run_mode_direct
 elif [[ ${mode} == server ]]; then run_mode_server
@@ -247,6 +247,6 @@ else
     exit 1
 fi
 
-echo "time_end   $(date "+%s.%N")" >> ${odir}/runner.log
+echo "time_end   $(date -u "+%s.%N")" >> ${odir}/runner.log
 
 echo

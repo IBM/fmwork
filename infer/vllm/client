@@ -37,12 +37,18 @@ vllm bench serve
     ${args[*]}
 "
 
+# Store start time in UTC
+echo "client_time_start:$(date -u "+%s.%N")"
+
 echo
 env | sort | sed 's/^/FMWORK ENV /'
 echo
 echo ${cmd}
 echo
 eval ${cmd}
+
+# Store end time in UTC
+echo "client_time_end:$(date -u "+%s.%N")"
 
 # multi-runs enabled!
 # -------------------
@@ -73,10 +79,12 @@ vllm bench serve
 
 echo "$(date) -- starting ${instance}"
 
+
 echo        &>> ${odir}/client.log.${instance}
 echo ${cmd} &>> ${odir}/client.log.${instance}
 echo        &>> ${odir}/client.log.${instance}
 eval ${cmd} &>> ${odir}/client.log.${instance}
+
 
 echo "$(date) -- finished ${instance}"
 
