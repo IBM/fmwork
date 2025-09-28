@@ -133,8 +133,6 @@ def get_cpu_metrics(prometheus_url: str, pod_label_config: str, start_time, end_
             metric_labels = result['metric']
             time_series = result['values']
 
-            print(f"\tCPU Metrics:")
-
             for timestamp, value in time_series:
                 # Convert the timestamp to a human-readable format
                 # readable_time = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
@@ -152,7 +150,6 @@ def get_cpu_metrics(prometheus_url: str, pod_label_config: str, start_time, end_
                 "cores": round(result_cores_used, 3),
                 "percentage": round(result_cores_percentage, 3)
             }
-            print(f"\t\tCores: {result_cores_used:.3f}, Percentage: {result_cores_percentage:.3f}%")
 
         return metric_collection
 
@@ -190,7 +187,6 @@ def get_memory_metrics(prometheus_url: str, pod_label_config, start_time, end_ti
         for result in metric_data:
             metric_labels = result['metric']
             time_series = result['values']
-            print(f"\tMemory Metrics:")
             for timestamp, value in time_series:
                 readable_time = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
                 memory_bytes = float(value)
@@ -212,8 +208,6 @@ def get_memory_metrics(prometheus_url: str, pod_label_config, start_time, end_ti
                 "mb": round(result_mem_mb, 3),
                 "gb": round(result_mem_gb, 3)
             }
-
-            print(f"\t\tBytes: {result_mem_bytes:.3f}, MB: {result_mem_mb:.3f}, GB: {result_mem_gb:.3f}")
 
         return metric_collection
 
@@ -252,7 +246,6 @@ if __name__ == "__main__":
 
     timezone = ZoneInfo(args.timezone)
 
-    print("Timezone used: ", timezone)
     start_time = datetime.datetime.fromtimestamp(args.start_time, tz=timezone)
     end_time = datetime.datetime.fromtimestamp(args.end_time, tz=timezone)
 
@@ -262,10 +255,6 @@ if __name__ == "__main__":
 
     for query_fn in query_fns:
 
-        print(f"\nQuery Fn: {query_fn}")
-
         get_cpu_metrics(THANOS_API_URL, pod_label_config, start_time, end_time, query_fn=query_fn)
 
         get_memory_metrics(THANOS_API_URL, pod_label_config, start_time, end_time, query_fn=query_fn)
-
-        print("======================================")
