@@ -8,6 +8,7 @@ import sys
 import traceback
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import glob
 
 
 ### CONSTANTS
@@ -19,7 +20,6 @@ class fmwork:
         pass
 
 def check_error_in_log(log_path):
-
     if not os.path.exists(log_path):
         return None, None
 
@@ -41,12 +41,10 @@ def check_error_in_log(log_path):
         content = open(log_path, 'r', errors='ignore').read()
         for error_code, pattern in error_patterns:
             if re.search(pattern, content):
-                # For CTL, extract the full line containing the pattern
                 if error_code == "CTL":
                     for line in content.split('\n'):
                         if re.search(pattern, line):
                             return error_code, f'{error_code} | "{line.strip()}"'
-                # For other errors, use the pattern
                 return error_code, f'{error_code} | "{pattern}"'
     except Exception as e:
         return "READ_ERROR", f'READ_ERROR | "Could not read log file: {str(e)}"'
@@ -54,26 +52,20 @@ def check_error_in_log(log_path):
     return None, None
 
 def extract_model_version(parsed_model, input_model):
-
     if not parsed_model or not input_model:
         return None
-
     if parsed_model.startswith(input_model + '/'):
         return parsed_model[len(input_model) + 1:]
-
     return None
 
 def determine_precision(model_name, default_precision):
-
     if model_name and 'fp8' in model_name.lower():
         return 'fp8'
     return default_precision
 
 def extract_context_length_direct(log_driver):
-
     if not os.path.exists(log_driver):
         return None
-
     try:
         for line in open(log_driver, errors='ignore'):
             if line.startswith('FMWORK ARG') and '--engine:max_model_len@' in line:
@@ -82,14 +74,11 @@ def extract_context_length_direct(log_driver):
                     return int(match.group(1))
     except Exception:
         pass
-
     return None
 
 def extract_context_length_server(cmd_server):
-
     if not os.path.exists(cmd_server):
         return None
-
     try:
         content = open(cmd_server).read()
         match = re.search(r'--max-model-len\s+(\d+)', content)
@@ -97,11 +86,9 @@ def extract_context_length_server(cmd_server):
             return int(match.group(1))
     except Exception:
         pass
-
     return None
 
 def get_server_completion_info(args_path):
-
     cmd_client = os.path.join(args_path, 'client.cmd')
     log_client = os.path.join(args_path, 'client.log')
 
@@ -128,8 +115,91 @@ def get_server_completion_info(args_path):
 
     return num_prompts, successful_requests
 
-def main():
+def is_multi_client_mode(args_path):
+    """Check if this is multi-client mode by looking for client.log.X files"""
+    client_log_files = glob.glob(os.path.join(args_path, 'client.log.*'))
+    return len(client_log_files) > 0
 
+def parse_client_benchmark_table(log_content):
+    """Parse the benchmark result table from client log content"""
+    result = {}
+    lines = log_content.split('\n')
+    in_table = False
+    
+    for line in lines:
+        line = line.strip()
+        if "============ Serving Benchmark Result ============" in line:
+            in_table = True
+            continue
+        if in_table and "==================================================" in line:
+            break
+        if in_table and line.startswith('---'):
+            continue
+        if in_table and ':' in line and not line.startswith('='):
+            parts = line.split(':')
+            if len(parts) == 2:
+                key = parts[0].strip()
+                value_str = parts[1].strip()
+                try:
+                    if '.' in value_str:
+                        value = float(value_str)
+                    else:
+                        value = int(value_str)
+                except ValueError:
+                    value = value_str
+                result[key] = value
+    return result
+
+def get_multi_client_info(args_path):
+    """Process multi-client logs and extract information"""
+    client_data = []
+    client_log_pattern = os.path.join(args_path, 'client.log.*')
+    client_log_files = sorted(glob.glob(client_log_pattern))
+    
+    for i, log_file in enumerate(client_log_files):
+        client_id = f"client{i}"
+        try:
+            with open(log_file, 'r', errors='ignore') as f:
+                content = f.read()
+            benchmark_data = parse_client_benchmark_table(content)
+            client_info = {
+                'client_id': client_id,
+                'log_file': os.path.basename(log_file),
+                'benchmark_data': benchmark_data
+            }
+            client_data.append(client_info)
+        except Exception as e:
+            client_info = {
+                'client_id': client_id,
+                'log_file': os.path.basename(log_file),
+                'error': f"Failed to parse: {str(e)}"
+            }
+            client_data.append(client_info)
+    
+    return client_data
+
+def parse_multi_config(multi_string):
+    """
+    Parse --multi parameter into list of client configs
+    Example: "128/256/4/100,256/512/8/200"
+    Returns: [
+        {'input': 128, 'output': 256, 'batch': 4, 'num_prompts': 100},
+        {'input': 256, 'output': 512, 'batch': 8, 'num_prompts': 200}
+    ]
+    """
+    configs = []
+    for combo in multi_string.split(','):
+        parts = combo.split('/')
+        if len(parts) >= 4:
+            configs.append({
+                'input': int(parts[0]),
+                'output': int(parts[1]),
+                'batch': int(parts[2]),
+                'num_prompts': int(parts[3])
+            })
+    return configs
+
+def main():
     parser = argparse.ArgumentParser()
     parser.add = parser.add_argument
     parser.add('--path',         type=str, required=True)
@@ -146,13 +216,11 @@ def main():
     return process_direct(args)
 
 def process_direct(args):
-
     if os.path.isdir(args.path):
         log_driver = os.path.join(args.path, 'driver.log')
     else:
         log_driver = args.path
 
-    # Initialize variables
     warmup = None
     batch_mode = 'static'
     model_name = None
@@ -163,16 +231,11 @@ def process_direct(args):
     setup = None
 
     if not os.path.exists(log_driver):
-        raise fmwork.Exception(
-            f'Could not find {log_driver}.')
+        raise fmwork.Exception(f'Could not find {log_driver}.')
 
     opts = []
     hits = []
-
-    # Check for errors in driver.log
     error_code, error_msg = check_error_in_log(log_driver)
-
-    # Determine if execution was successful (has FMWORK GEN entries)
     has_success_data = False
 
     for line in open(log_driver, errors='ignore'):
@@ -181,27 +244,21 @@ def process_direct(args):
                 warmup = float(line.split('took ')[1].split(' seconds')[0])
 
         if line.startswith('FMWORK EXP'):
-
             split = line.strip().split(' ')
             opt = '--env ' + ' '.join(split[2:])
             opts.append(opt)
-
             if 'VLLM_SPYRE_USE_CB' in line:
                 value = line.strip().split('=')[-1]
                 if value == '1':
                     batch_mode = 'continuous'
 
         if line.startswith('FMWORK ARG'):
-
             opts.append(line.strip()[11:])
-
-            # Parse FMWORK ARG parameters for direct mode (backup values)
-            arg_line = line.strip()[11:]  # Remove "FMWORK ARG "
+            arg_line = line.strip()[11:]
             parts = arg_line.split()
             if len(parts) >= 2:
                 key = parts[0]
                 val = ' '.join(parts[1:])
-
                 if key == '--batch_sizes':
                     try:
                         batch_size = int(val)
@@ -214,7 +271,6 @@ def process_direct(args):
                         pass
                 elif key == '--output_sizes':
                     try:
-                        # Handle "1,128" format - take the larger value
                         sizes = [int(x.strip()) for x in val.split(',')]
                         output_size = max(sizes)
                     except ValueError:
@@ -224,24 +280,18 @@ def process_direct(args):
                         tp_size = int(val)
                     except ValueError:
                         pass
-
-                # Always check for model_name
                 if key == '--model_name':
                     model_name = val
 
         if line.startswith('FMWORK SETUP'):
-
             setup = float(line.strip().split(' ')[-1])
 
         if line.startswith('FMWORK GEN'):
-
             has_success_data = True
             split = line.strip().split(' ')
-
             time_start  =       split[2]
             time_end    =       split[3]
-            model_name  =       split[4]  # Parse from FMWORK GEN first
-            # FMWORK GEN values override FMWORK ARG values (actual vs planned)
+            model_name  =       split[4]
             input_size  =   int(split[5])
             output_size =   int(split[6])
             batch_size  =   int(split[7])
@@ -253,8 +303,9 @@ def process_direct(args):
             ttft        = float(split[13])
             itl         = float(split[14])
             thp         = float(split[15])
+            # Calculate req_thp: batch_size / gen_time
+            req_thp     = round(batch_size / gen, 2) if gen > 0 else None
 
-            # Determine status
             if error_code is None:
                 status = "OK"
             else:
@@ -262,7 +313,6 @@ def process_direct(args):
 
             notes = []
 
-            # Apply --model parameter processing after parsing
             if args.model:
                 model_version = extract_model_version(model_name, args.model)
                 final_model_name = args.model
@@ -270,10 +320,7 @@ def process_direct(args):
                 model_version = None
                 final_model_name = model_name
 
-            # Determine precision based on model name
             final_precision = determine_precision(model_name, args.precision)
-
-            # Determine context length
             context_length = extract_context_length_direct(log_driver)
             if context_length is None and input_size is not None and output_size is not None:
                 context_length = input_size + output_size
@@ -287,15 +334,19 @@ def process_direct(args):
                 'precision'     : final_precision,
                 'input'         : input_size,
                 'output'        : output_size,
+                'num_prompts'   : None,
                 'batch'         : batch_size,
                 'tp'            : tp_size,
                 'context_length': context_length,
+                'server_id'     : None,
+                'client_mode'   : None,
                 'opts'          : opts,
                 'warmup'        : round(warmup, 3) if warmup is not None else None,
                 'setup'         : setup,
                 'ttft'          : ttft,
                 'itl'           : itl,
                 'thp'           : thp,
+                'req_thp'       : req_thp,
                 'mode'          : 'direct',
                 'batch_mode'    : batch_mode,
                 'range_ratio'   : 0.0,
@@ -304,7 +355,6 @@ def process_direct(args):
                 'notes'         : notes,
             })
 
-    # If no FMWORK GEN entries found, this is a failure
     if not has_success_data:
         if error_code:
             status = f"ERR_{error_code}"
@@ -313,7 +363,6 @@ def process_direct(args):
             if not error_msg:
                 error_msg = "UNKNOWN | \"No success data and no identifiable error\""
 
-        # Apply --model parameter processing after parsing
         if args.model:
             model_version = extract_model_version(model_name, args.model)
             final_model_name = args.model
@@ -321,10 +370,7 @@ def process_direct(args):
             model_version = None
             final_model_name = model_name
 
-        # Determine precision based on model name
         final_precision = determine_precision(model_name, args.precision)
-
-        # Determine context length
         context_length = extract_context_length_direct(log_driver)
         if context_length is None and input_size is not None and output_size is not None:
             context_length = input_size + output_size
@@ -338,15 +384,19 @@ def process_direct(args):
             'precision'     : final_precision,
             'input'         : input_size,
             'output'        : output_size,
+            'num_prompts'   : None,
             'batch'         : batch_size,
             'tp'            : tp_size,
             'context_length': context_length,
+            'server_id'     : None,
+            'client_mode'   : None,
             'opts'          : opts,
             'warmup'        : None,
             'setup'         : setup,
             'ttft'          : None,
             'itl'           : None,
             'thp'           : None,
+            'req_thp'       : None,
             'mode'          : 'direct',
             'batch_mode'    : batch_mode,
             'range_ratio'   : 0.0,
@@ -358,7 +408,6 @@ def process_direct(args):
     print(json.dumps(hits, indent=4))
 
 def process_server(args):
-
     log_runner  = os.path.join(args.path, 'runner.log')
     cmd_server  = os.path.join(args.path, 'server.cmd')
     log_server  = os.path.join(args.path, 'server.log')
@@ -366,27 +415,21 @@ def process_server(args):
     log_client  = os.path.join(args.path, 'client.log')
     log_metrics = os.path.join(args.path, 'metrics.log')
 
+    multi_client_mode = is_multi_client_mode(args.path)
 
-    # Check required files for server mode
     required_files = [cmd_server, log_server]
     for path in required_files:
         if not os.path.exists(path):
-            raise fmwork.Exception(
-                f'Could not find {path}.')
-
-    # Optional files for successful runs
-    optional_files = [cmd_client, log_client, log_metrics]
+            raise fmwork.Exception(f'Could not find {path}.')
 
     opts = []
-
-    # Check for errors in server.log (following bash script logic)
     error_code, error_msg = check_error_in_log(log_server)
 
-    # get model timestamps from runner log
+    # Get model timestamps from runner log
     model_name = None
     time_start = None
     time_end = None
-    prom_metrics = None
+    warmup = None
 
     if os.path.exists(log_runner):
         for line in open(log_runner):
@@ -396,23 +439,26 @@ def process_server(args):
                 time_start = line.strip().split(' ')[-1]
             if line.startswith('time_end' ):
                 time_end   = line.strip().split(' ')[-1]
+    
+    # Extract warmup from server.log
+    if os.path.exists(log_server):
+        try:
+            for line in open(log_server, errors='ignore'):
+                if warmup is None:
+                    if 'init engine (profile, create kv cache, warmup model) took' in line:
+                        warmup = float(line.split('took ')[1].split(' seconds')[0])
+        except Exception:
+            pass
 
+    server_id = time_start  # server_id = time_start from runner.log
 
-    # get opts from server command and client command (if exists)
+    # Get opts from server command
     server_cmd_content = open(cmd_server).read().strip()
     for s in server_cmd_content.split('--')[1:]:
         opts.append('[server] --' + s.strip())
 
-    if os.path.exists(cmd_client):
-        line = open(cmd_client).read().strip()
-        for s in line.split('--')[1:]:
-            opts.append('[client] --' + s.strip())
-
-
-
-    # read environment variables looking for meaningful information
+    # Determine batch_mode early (needed for input/output extraction logic)
     batch_mode = 'static'
-
     for line in open(log_server):
         if line.startswith('FMWORK EXP'):
             if 'VLLM_SPYRE_USE_CB' in line:
@@ -420,121 +466,206 @@ def process_server(args):
                 if value == '1':
                     batch_mode = 'continuous'
 
-    # read parameters from opts (enhanced for server.cmd)
+    # Extract server parameters
     input_size  = None
     output_size = None
     batch_size  = None
     tp_size     = None
-    range_ratio = 0.0
 
-    # Extract warmup parameters directly from server.cmd content first
-    warmup_prompt_match = re.search(r'VLLM_SPYRE_WARMUP_PROMPT_LENS=(\d+)', server_cmd_content)
-    if warmup_prompt_match:
-        input_size = int(warmup_prompt_match.group(1))
-
-    warmup_tokens_match = re.search(r'VLLM_SPYRE_WARMUP_NEW_TOKENS=(\d+)', server_cmd_content)
-    if warmup_tokens_match:
-        output_size = int(warmup_tokens_match.group(1))
-
-    warmup_batch_match = re.search(r'VLLM_SPYRE_WARMUP_BATCH_SIZES=(\d+)', server_cmd_content)
-    if warmup_batch_match:
-        batch_size = int(warmup_batch_match.group(1))
-
-    # Extract other server parameters from server.cmd
+    # Extract batch from server.cmd
     max_num_seqs_match = re.search(r'--max-num-seqs\s+(\d+)', server_cmd_content)
-    if max_num_seqs_match and batch_size is None:
+    if max_num_seqs_match:
         batch_size = int(max_num_seqs_match.group(1))
 
     tensor_parallel_match = re.search(r'--tensor-parallel-size\s+(\d+)', server_cmd_content)
     if tensor_parallel_match:
         tp_size = int(tensor_parallel_match.group(1))
 
-    # Extract model from server.cmd as backup
     if not model_name:
         model_match = re.search(r'--model\s+(\S+)', server_cmd_content)
         if model_match:
             model_name = model_match.group(1)
 
-    # Extract client parameters from client.cmd if exists
+    # Handle model name and version extraction
+    if args.model:
+        model_version = extract_model_version(model_name, args.model)
+        final_model_name = args.model
+    else:
+        model_version = None
+        final_model_name = model_name
+
+    final_precision = determine_precision(model_name, args.precision)
+    context_length = extract_context_length_server(cmd_server)
+
+    # ===== MULTI-CLIENT MODE =====
+    if multi_client_mode:
+        # Parse --multi parameter
+        multi_config = None
+        if os.path.exists(cmd_client):
+            content = open(cmd_client).read()
+            multi_match = re.search(r'--multi\s+([^\s]+)', content)
+            if multi_match:
+                multi_config = parse_multi_config(multi_match.group(1))
+        
+        if not multi_config:
+            raise fmwork.Exception("Multi-client mode but no valid --multi config found")
+        
+        # Get client data from log files
+        client_data = get_multi_client_info(args.path)
+        
+        # Generate one payload per client
+        hits = []
+        for i, (config, client_info) in enumerate(zip(multi_config, client_data)):
+            benchmark_data = client_info.get('benchmark_data', {})
+            
+            # Build client-specific opts
+            client_opts = opts.copy()  # Start with server opts
+            client_opts.append(f'[client{i}] --random-input-len {config["input"]}')
+            client_opts.append(f'[client{i}] --random-output-len {config["output"]}')
+            client_opts.append(f'[client{i}] --max-concurrency {config["batch"]}')
+            client_opts.append(f'[client{i}] --num-prompts {config["num_prompts"]}')
+            
+            # Calculate context_length for this client
+            client_context_length = context_length
+            if client_context_length is None:
+                client_context_length = config['input'] + config['output']
+            
+            # Build notes for this client
+            client_notes = [f"client{i}"]
+            if 'Successful requests' in benchmark_data:
+                client_notes.append(f"successful_requests:{benchmark_data['Successful requests']}")
+            
+            # Determine status
+            if error_code is None:
+                status = "OK"
+            else:
+                status = f"PART_{error_code}"
+            
+            hits.append({
+                'timestamp'     : time_start,
+                'metadata_id'   : args.metadata_id,
+                'engine'        : 'fmwork/infer/vllm',
+                'model'         : final_model_name,
+                'model_version' : model_version,
+                'precision'     : final_precision,
+                'input'         : config['input'],
+                'output'        : config['output'],
+                'num_prompts'   : config['num_prompts'],
+                'batch'         : batch_size,
+                'tp'            : tp_size,
+                'context_length': client_context_length,
+                'server_id'     : server_id,
+                'client_mode'   : 'multi',
+                'opts'          : client_opts,
+                'warmup'        : round(warmup, 3) if warmup is not None else None,
+                'setup'         : None,
+                'ttft'          : round(benchmark_data.get('Median TTFT (ms)', 0) / 1000.0, 3) if 'Median TTFT (ms)' in benchmark_data else None,
+                'itl'           : round(benchmark_data.get('Median ITL (ms)', 0), 1) if 'Median ITL (ms)' in benchmark_data else None,
+                'thp'           : round(benchmark_data.get('Output token throughput (tok/s)', 0), 1) if 'Output token throughput (tok/s)' in benchmark_data else None,
+                'req_thp'       : round(benchmark_data.get('Request throughput (req/s)', 0), 3) if 'Request throughput (req/s)' in benchmark_data else None,
+                'mode'          : 'server',
+                'batch_mode'    : batch_mode,
+                'range_ratio'   : 0.0,
+                'status'        : status,
+                'error_msg'     : error_msg,
+                'notes'         : client_notes,
+                'prom_metrics'  : None,
+            })
+        
+        print(json.dumps(hits, indent=4))
+        return
+
+    # ===== SINGLE-CLIENT MODE =====
+    range_ratio = 0.0
+    num_prompts = None
+    
+    # Extract warmup parameters from server.cmd
+    warmup_prompt_match = re.search(r'VLLM_SPYRE_WARMUP_PROMPT_LENS=(\d+)', server_cmd_content)
+    warmup_tokens_match = re.search(r'VLLM_SPYRE_WARMUP_NEW_TOKENS=(\d+)', server_cmd_content)
+    warmup_input = int(warmup_prompt_match.group(1)) if warmup_prompt_match else None
+    warmup_output = int(warmup_tokens_match.group(1)) if warmup_tokens_match else None
+    
+    # Extract client.cmd parameters if exists
+    client_input = None
+    client_output = None
     if os.path.exists(cmd_client):
         client_cmd_content = open(cmd_client).read().strip()
-
+        
+        # Add client opts
+        for s in client_cmd_content.split('--')[1:]:
+            opts.append('[client] --' + s.strip())
+        
         random_input_match = re.search(r'--random-input-len\s+(\d+)', client_cmd_content)
         if random_input_match:
-            input_size = int(random_input_match.group(1))
-
+            client_input = int(random_input_match.group(1))
+        
         random_output_match = re.search(r'--random-output-len\s+(\d+)', client_cmd_content)
         if random_output_match:
-            output_size = int(random_output_match.group(1))
-
+            client_output = int(random_output_match.group(1))
+        
         random_range_match = re.search(r'--random-range-ratio\s+([\d.]+)', client_cmd_content)
         if random_range_match:
             range_ratio = float(random_range_match.group(1))
-
-
-
-    # Initialize default values for metrics
+        
+        num_prompts_match = re.search(r'--num-prompts\s+(\d+)', client_cmd_content)
+        if num_prompts_match:
+            num_prompts = int(num_prompts_match.group(1))
+    
+    # Determine input/output based on batch_mode
+    if batch_mode == 'continuous':
+        # CB=1: Priority: client.cmd -> warmup -> fallback
+        input_size = client_input if client_input is not None else warmup_input
+        output_size = client_output if client_output is not None else warmup_output
+    else:
+        # CB=0: Priority: warmup -> client.cmd -> fallback
+        input_size = warmup_input if warmup_input is not None else client_input
+        output_size = warmup_output if warmup_output is not None else client_output
+    
+    # Process metrics
     ttft = None
     itl = None
-    thp = None # output token throughput
+    thp = None
     req_thp = None
     requests_ok = None
     total_input = None
     total_output = None
-    total_time = None
-
-    # Check if server mode had successful execution (required files exist)
+    client_start_time = None
+    client_end_time = None
+    prom_metrics = None
+    
     has_success_data = (os.path.exists(log_client) and os.path.exists(log_metrics))
-
-    # Only process metrics if we have success data
+    
     if has_success_data:
-        client_start_time = None
-        client_end_time = None
-        # process metrics
         try:
             for line in open(log_client):
-
                 if line.startswith('Successful requests'):
-                    requests_ok  = int(line.strip().split(' ')[-1])
-
+                    requests_ok = int(line.strip().split(' ')[-1])
                 if line.startswith('Total input tokens'):
-                    total_input  = int(line.strip().split(' ')[-1])
-
+                    total_input = int(line.strip().split(' ')[-1])
                 if line.startswith('Total generated tokens'):
                     total_output = int(line.strip().split(' ')[-1])
-
-                if line.startswith('Benchmark duration'):
-                    total_time   = float(line.strip().split(' ')[-1])
-
                 if line.startswith('Median TTFT (ms)'):
-                    ttft = float(line.strip().split(' ')[-1]) / 1000.0 # ms to s
-
+                    ttft = float(line.strip().split(' ')[-1]) / 1000.0
                 if line.startswith('Median ITL (ms)'):
-                    itl  = float(line.strip().split(' ')[-1])
-
+                    itl = float(line.strip().split(' ')[-1])
                 if line.startswith('Output token throughput (tok/s)'):
-                    thp  = float(line.strip().split(' ')[-1])
-
+                    thp = float(line.strip().split(' ')[-1])
                 if line.startswith('Request throughput (req/s)'):
-                    req_thp  = float(line.strip().split(' ')[-1])
-
+                    req_thp = float(line.strip().split(' ')[-1])
                 if line.startswith('client_time_start:'):
-                    client_start_time  = float(line.strip().split(':')[-1])
-
+                    client_start_time = float(line.strip().split(':')[-1])
                 if line.startswith('client_time_end:'):
-                    client_end_time  = float(line.strip().split(':')[-1])
-
-            # if shapes could not be read, might be using different dataset
-            # read values from output instead
+                    client_end_time = float(line.strip().split(':')[-1])
+            
+            # Fallback: calculate from actual results
             if requests_ok and requests_ok > 0:
-                if not input_size and total_input:
-                    input_size  = int(total_input  / requests_ok)
-                if not output_size and total_output:
+                if input_size is None and total_input:
+                    input_size = int(total_input / requests_ok)
+                if output_size is None and total_output:
                     output_size = int(total_output / requests_ok)
-
+            
+            # Prometheus metrics if enabled
             if args.enable_prom_metrics:
-
-                # import related functions
                 from prometheus_metrics import (
                     QueryFunction,
                     THANOS_API_TOKEN,
@@ -542,34 +673,27 @@ def process_server(args):
                     get_cpu_metrics,
                     get_memory_metrics
                 )
-
+                
                 PROM_QUERY_METRICS = [QueryFunction.AVG, QueryFunction.MAX]
-
                 RUNNER_POD_NAME = os.getenv(PODNAME_ENV_VAR_NAME)
-
+                
                 if not THANOS_API_TOKEN:
-                    raise fmwork.Exception(
-                        "THANOS_API_TOKEN not set"
-                    )
-
+                    raise fmwork.Exception("THANOS_API_TOKEN not set")
+                
                 prom_metrics = {}
-
+                
                 if not client_start_time or not client_end_time:
-                    raise fmwork.Exception(
-                        "client_time_start or client_time_end are None"
-                    )
-
+                    raise fmwork.Exception("client_time_start or client_time_end are None")
+                
                 start_timestamp = datetime.fromtimestamp(client_start_time, ZoneInfo('UTC'))
                 end_timestamp = datetime.fromtimestamp(client_end_time, ZoneInfo('UTC'))
+                
                 if not RUNNER_POD_NAME:
-                    raise fmwork.Exception(
-                        "HOSTNAME env variable missing"
-                    )
-                # Collect prometheus metrics
+                    raise fmwork.Exception("HOSTNAME env variable missing")
+                
                 pod_label_config = f'{{pod="{RUNNER_POD_NAME}", container!=""}}'
-
+                
                 for query_fn in PROM_QUERY_METRICS:
-                    # NOTE: Time has to be in epoch
                     cpu_metrics = get_cpu_metrics(
                         THANOS_API_URL,
                         pod_label_config,
@@ -588,35 +712,28 @@ def process_server(args):
                         "cpu": cpu_metrics,
                         "memory": memory_metrics
                     }
-
+                    
         except Exception as e:
-            # If we can't process metrics due to error, set error info
             if not error_code:
                 error_code = "METRICS_ERROR"
                 error_msg = f'METRICS_ERROR | "Failed to process metrics: {str(e)}"'
-
+    
     # Determine status and notes
     status = None
     notes = []
     is_partial = False
-
+    
     if has_success_data:
-        # Get completion info for server mode
-        num_prompts, successful_requests = get_server_completion_info(args.path)
-
-        # Check if it's partial execution (two conditions)
-        # Condition 1: Error detected in logs
+        cmd_num_prompts, successful_requests = get_server_completion_info(args.path)
+        
         if error_code is not None:
             is_partial = True
-
-        # Condition 2: Incomplete request completion
-        if num_prompts is not None and successful_requests is not None:
+        
+        if cmd_num_prompts is not None and successful_requests is not None:
             notes.append(f"successful_requests:{successful_requests}")
-            notes.append(f"num-prompts:{num_prompts}")
-            if successful_requests < num_prompts:
+            if successful_requests < cmd_num_prompts:
                 is_partial = True
-
-        # Set status based on partial execution
+        
         if is_partial:
             if error_code is not None:
                 status = f"PART_{error_code}"
@@ -626,30 +743,16 @@ def process_server(args):
         else:
             status = "OK"
     else:
-        # Failed execution
         if error_code:
             status = f"ERR_{error_code}"
         else:
             status = "ERR_UNKNOWN"
             if not error_msg:
                 error_msg = "UNKNOWN | \"No success data and no identifiable error\""
-
-    # Handle model name and version extraction (after parsing from logs)
-    if args.model:
-        model_version = extract_model_version(model_name, args.model)
-        final_model_name = args.model
-    else:
-        model_version = None
-        final_model_name = model_name
-
-    # Determine precision based on model name
-    final_precision = determine_precision(model_name, args.precision)
-
-    # Determine context length
-    context_length = extract_context_length_server(cmd_server)
+    
     if context_length is None and input_size is not None and output_size is not None:
         context_length = input_size + output_size
-
+    
     hits = [{
         'timestamp'     : time_start,
         'metadata_id'   : args.metadata_id,
@@ -659,15 +762,18 @@ def process_server(args):
         'precision'     : final_precision,
         'input'         : input_size,
         'output'        : output_size,
+        'num_prompts'   : num_prompts,
         'batch'         : batch_size,
         'tp'            : tp_size,
         'context_length': context_length,
+        'server_id'     : server_id,
+        'client_mode'   : 'single',
         'opts'          : opts,
-        'warmup'        : None,
+        'warmup'        : round(warmup, 3) if warmup is not None else None,
         'setup'         : None,
         'ttft'          : round(ttft, 3) if ttft is not None else None,
-        'itl'           : round(itl,  1) if itl is not None else None,
-        'thp'           : round(thp,  1) if thp is not None else None,
+        'itl'           : round(itl, 1) if itl is not None else None,
+        'thp'           : round(thp, 1) if thp is not None else None,
         'req_thp'       : round(req_thp, 3) if req_thp is not None else None,
         'mode'          : 'server',
         'batch_mode'    : batch_mode,
