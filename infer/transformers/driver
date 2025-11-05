@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+import argparse
+import fmwork
+import torch
+import transformers
+
+class par: pass
+parser = argparse.ArgumentParser()
+parser.add_argument('-m', '--model',       required=True)
+parser.add_argument('-i', '--input_size' , required=True, type=int)
+parser.add_argument('-o', '--output_size', required=True, type=int)
+parser.add_argument('-b', '--batch_size',  required=True, type=int)
+parser.add_argument('-r', '--reps',        required=True, type=int)
+parser.add_argument('-c', '--model_class')
+parser.add_argument('-d', '--device', default='cuda')
+parser.parse_args(namespace=par)
+
+config = transformers.AutoConfig.from_pretrained(par.model)
+
+if par.model_class is None: par.model_class = config.architectures[0]
+
+device = torch.device(par.device)
+
+input_batch = fmwork.input_generator(
+  par.model,
+  par.input_size,
+  par.batch_size,
+  return_tensors = 'pt',
+).to(device)
+
+model_class = getattr(transformers, par.model_class)
+
+model = model_class.from_pretrained(
+  par.model,
+).to(device)
+
+model.half()
+
+kwargs = {
+  **input_batch,
+  'min_new_tokens'          : par.output_size,
+  'max_new_tokens'          : par.output_size,
+  'output_scores'           : True,
+  'return_dict_in_generate' : True,
+}
+
+with torch.no_grad():
+  dts = fmwork.loop(par.reps, model.generate, kwargs)
+
+fmwork.show(dts, par.output_size, par.batch_size)
