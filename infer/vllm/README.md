@@ -274,7 +274,34 @@ GEN: [ THP  ] Throughput (tok/s)       = 143.8
 FMWORK GEN 1755063811.412279354 1755063816.115997318 meta-llama/Llama-3.1-8B-Instruct/main 1024 128 1 1 0.016 0.001 0.917 0.890 0.027 6.954 143.8
 ```
 
-After using `process` script (provide the path to the experiment folder):
+### Logs to JSON
+
+The script automatically detects whether to parse logs.
+
+```
+python process.py --path <PATH_TO_EXPERIMENT_FOLDER> [OPTIONAL_ARGS]
+```
+| Argument | Required | Description |
+| :--- | :--- | :--- |
+| **`--path`** | **Yes** | The directory containing the benchmark log and command files (`*.log`, `*.cmd`). |
+| `--model` | No | Expected base model name for version extraction. |
+| `--precision` | No | Default model precision (e.g., `fp16`). |
+| `--enable_prom_metrics` | No | Flag to enable processing of Prometheus CPU/Memory metrics. |
+
+#### JSON Output Structure (Key Fields)
+
+The script outputs a list of JSON objects, one for each run (or each client in multi-client mode).
+
+| Field | Description | Source |
+| :--- | :--- | :--- |
+| `model` | Model name and version. | Command/Log |
+| `input`, `output` | Input and output token lengths. | Command/Log |
+| `batch`, `tp` | Batch size and Tensor Parallel size. | Command/Log |
+| `ttft` | **Time To First Token** (s). | Log Metric |
+| `itl` | **Inter-Token Latency** (ms). | Log Metric |
+| `thp` | **Output Token Throughput** (tok/s). | Log Metric |
+| `req_thp` | **Request Throughput** (req/s). | Calculated |
+| `status` | Run status (`OK`, `PART_`, `ERR_`). | Log Check |
 
 ```json
 [
@@ -313,3 +340,28 @@ After using `process` script (provide the path to the experiment folder):
     }
 ]
 ```
+### Logs to CSV
+
+`log2csv.sh` is a **Shell script** to search a top-level directory, extract key performance metrics and run status from all individual test runs, and prints the result to **stdout** in **CSV** format.
+
+#### Usage
+
+Provide the path to the **top-level directory** containing multiple experiment folders.
+
+```bash
+# Redirect the output to a CSV file
+./log2csv.sh <PATH_TO_TOP_LEVEL_EXPERIMENT_DIR> > results.csv
+```
+
+#### Output CSV Fields (Example Headers)
+
+The script outputs a fixed set of fields for each run:
+
+| Field Name | Description | Source |
+| :--- | :--- | :--- |
+| `path` | Full path to the experiment directory. | `find` |
+| `status` | Run status (`OK`, `OOR`, `RPC`, etc.). | Log Check |
+| `E2E` | End-to-end benchmark duration (Server Mode). | `client.log` |
+| `RAW_TTFT` | Raw HW (Direct Mode) or Server-side Average (Server Mode) (seconds).| `metrics.log` calculated |
+| `Median_TTFT` | Median Time To First Token (milliseconds). | `client.log` |
+| `Median_ITL` | Median Inter-Token Latency (milliseconds). | `client.log` |
