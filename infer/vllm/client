@@ -2,6 +2,7 @@
 
 envs=()
 args=()
+ seq=0
 
 while [[ ${#} -gt 0 ]]; do
     arg=${1}; case ${arg} in
@@ -9,6 +10,7 @@ while [[ ${#} -gt 0 ]]; do
         -o | --odir  ) shift; odir=${1}      ;;
         -e | --env   ) shift; envs+=("${1}") ;;
              --multi ) shift; multi=${1}     ;;
+             --seq   )        seq=1          ;;
          *           )        args+=("${1}") ;;
     esac; shift
 done
@@ -89,6 +91,8 @@ eval ${cmd} &>> ${odir}/client.log.${instance}
 echo "$(date) -- finished ${instance}"
 
 } &
+
+if [[ ${seq} -eq 1 ]]; then wait; fi
 
 instance=$(( instance + 1 ))
 
