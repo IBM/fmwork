@@ -121,7 +121,6 @@ def is_multi_client_mode(args_path):
     return len(client_log_files) > 0
 
 def parse_client_benchmark_table(log_content):
-    """Parse the benchmark result table from client log content"""
     result = {}
     lines = log_content.split('\n')
     in_table = False
@@ -138,7 +137,7 @@ def parse_client_benchmark_table(log_content):
         if in_table and ':' in line and not line.startswith('='):
             parts = line.split(':')
             if len(parts) == 2:
-                key = parts[0].strip()
+                key = parts[0].strip().replace(' ', '_')
                 value_str = parts[1].strip()
                 try:
                     if '.' in value_str:
@@ -532,8 +531,8 @@ def process_server(args):
             
             # Build notes for this client
             client_notes = [f"client{i}"]
-            if 'Successful requests' in benchmark_data:
-                client_notes.append(f"successful_requests:{benchmark_data['Successful requests']}")
+            if 'Successful_requests' in benchmark_data:
+                 client_notes.append(f"successful_requests:{benchmark_data['Successful_requests']}")
             
             # Determine status
             if error_code is None:
@@ -541,6 +540,12 @@ def process_server(args):
             else:
                 status = f"PART_{error_code}"
             
+            # Calculate aggregate metrics using underscored keys from parse_client_benchmark_table
+            ttft_val = round(benchmark_data.get('Median_TTFT_(ms)', 0) / 1000.0, 3) if 'Median_TTFT_(ms)' in benchmark_data else None
+            itl_val = round(benchmark_data.get('Median_ITL_(ms)', 0), 1) if 'Median_ITL_(ms)' in benchmark_data else None
+            thp_val = round(benchmark_data.get('Output_token_throughput_(tok/s)', 0), 1) if 'Output_token_throughput_(tok/s)' in benchmark_data else None
+            req_thp_val = round(benchmark_data.get('Request_throughput_(req/s)', 0), 3) if 'Request_throughput_(req/s)' in benchmark_data else None
+
             hits.append({
                 'timestamp'     : time_start,
                 'metadata_id'   : args.metadata_id,
@@ -559,16 +564,17 @@ def process_server(args):
                 'opts'          : client_opts,
                 'warmup'        : round(warmup, 3) if warmup is not None else None,
                 'setup'         : None,
-                'ttft'          : round(benchmark_data.get('Median TTFT (ms)', 0) / 1000.0, 3) if 'Median TTFT (ms)' in benchmark_data else None,
-                'itl'           : round(benchmark_data.get('Median ITL (ms)', 0), 1) if 'Median ITL (ms)' in benchmark_data else None,
-                'thp'           : round(benchmark_data.get('Output token throughput (tok/s)', 0), 1) if 'Output token throughput (tok/s)' in benchmark_data else None,
-                'req_thp'       : round(benchmark_data.get('Request throughput (req/s)', 0), 3) if 'Request throughput (req/s)' in benchmark_data else None,
+                'ttft'          : ttft_val,
+                'itl'           : itl_val,
+                'thp'           : thp_val,
+                'req_thp'       : req_thp_val,
                 'mode'          : 'server',
                 'batch_mode'    : batch_mode,
                 'range_ratio'   : 0.0,
                 'status'        : status,
                 'error_msg'     : error_msg,
                 'notes'         : client_notes,
+                'metrics'       : benchmark_data,  # Add full metrics dict
                 'prom_metrics'  : None,
             })
         
@@ -632,92 +638,101 @@ def process_server(args):
     client_start_time = None
     client_end_time = None
     prom_metrics = None
-    
+    metrics = {}  # [NEW] Container for full metrics
+
     has_success_data = (os.path.exists(log_client) and os.path.exists(log_metrics))
     
     if has_success_data:
         try:
-            for line in open(log_client):
-                if line.startswith('Successful requests'):
-                    requests_ok = int(line.strip().split(' ')[-1])
-                if line.startswith('Total input tokens'):
-                    total_input = int(line.strip().split(' ')[-1])
-                if line.startswith('Total generated tokens'):
-                    total_output = int(line.strip().split(' ')[-1])
-                if line.startswith('Median TTFT (ms)'):
-                    ttft = float(line.strip().split(' ')[-1]) / 1000.0
-                if line.startswith('Median ITL (ms)'):
-                    itl = float(line.strip().split(' ')[-1])
-                if line.startswith('Output token throughput (tok/s)'):
-                    thp = float(line.strip().split(' ')[-1])
-                if line.startswith('Request throughput (req/s)'):
-                    req_thp = float(line.strip().split(' ')[-1])
+            content = open(log_client, 'r', errors='ignore').read()
+            
+            # Parse the benchmark table into the metrics dict
+            metrics = parse_client_benchmark_table(content)
+
+            # Extract values from metrics dict using underscored keys
+            if 'Successful_requests' in metrics:
+                requests_ok = metrics['Successful_requests']
+            if 'Total_input_tokens' in metrics:
+                total_input = metrics['Total_input_tokens']
+            if 'Total_generated_tokens' in metrics:
+                total_output = metrics['Total_generated_tokens']
+            if 'Median_TTFT_(ms)' in metrics:
+                ttft = metrics['Median_TTFT_(ms)'] / 1000.0
+            if 'Median_ITL_(ms)' in metrics:
+                itl = metrics['Median_ITL_(ms)']
+            if 'Output_token_throughput_(tok/s)' in metrics:
+                thp = metrics['Output_token_throughput_(tok/s)']
+            if 'Request_throughput_(req/s)' in metrics:
+                req_thp = metrics['Request_throughput_(req/s)']
+
+            # [NEW] Manually parse timestamps as they are not in the table
+            for line in content.split('\n'):
                 if line.startswith('client_time_start:'):
                     client_start_time = float(line.strip().split(':')[-1])
                 if line.startswith('client_time_end:'):
                     client_end_time = float(line.strip().split(':')[-1])
             
-            # Fallback: calculate from actual results
-            if requests_ok and requests_ok > 0:
-                if input_size is None and total_input:
-                    input_size = int(total_input / requests_ok)
-                if output_size is None and total_output:
-                    output_size = int(total_output / requests_ok)
-            
-            # Prometheus metrics if enabled
-            if args.enable_prom_metrics:
-                from prometheus_metrics import (
-                    QueryFunction,
-                    THANOS_API_TOKEN,
-                    THANOS_API_URL,
-                    get_cpu_metrics,
-                    get_memory_metrics
-                )
-                
-                PROM_QUERY_METRICS = [QueryFunction.AVG, QueryFunction.MAX]
-                RUNNER_POD_NAME = os.getenv(PODNAME_ENV_VAR_NAME)
-                
-                if not THANOS_API_TOKEN:
-                    raise fmwork.Exception("THANOS_API_TOKEN not set")
-                
-                prom_metrics = {}
-                
-                if not client_start_time or not client_end_time:
-                    raise fmwork.Exception("client_time_start or client_time_end are None")
-                
-                start_timestamp = datetime.fromtimestamp(client_start_time, ZoneInfo('UTC'))
-                end_timestamp = datetime.fromtimestamp(client_end_time, ZoneInfo('UTC'))
-                
-                if not RUNNER_POD_NAME:
-                    raise fmwork.Exception("HOSTNAME env variable missing")
-                
-                pod_label_config = f'{{pod="{RUNNER_POD_NAME}", container!=""}}'
-                
-                for query_fn in PROM_QUERY_METRICS:
-                    cpu_metrics = get_cpu_metrics(
-                        THANOS_API_URL,
-                        pod_label_config,
-                        start_timestamp,
-                        end_timestamp,
-                        query_fn=query_fn
-                    )
-                    memory_metrics = get_memory_metrics(
-                        THANOS_API_URL,
-                        pod_label_config,
-                        start_timestamp,
-                        end_timestamp,
-                        query_fn=query_fn
-                    )
-                    prom_metrics[query_fn.value] = {
-                        "cpu": cpu_metrics,
-                        "memory": memory_metrics
-                    }
-                    
         except Exception as e:
             if not error_code:
                 error_code = "METRICS_ERROR"
                 error_msg = f'METRICS_ERROR | "Failed to process metrics: {str(e)}"'
     
+    # Fallback: calculate from actual results
+    if requests_ok and requests_ok > 0:
+        if input_size is None and total_input:
+            input_size = int(total_input / requests_ok)
+        if output_size is None and total_output:
+            output_size = int(total_output / requests_ok)
+            
+    # Prometheus metrics if enabled
+    if args.enable_prom_metrics and client_start_time and client_end_time:
+        try:
+            from prometheus_metrics import (
+                QueryFunction, THANOS_API_TOKEN, THANOS_API_URL,
+                get_cpu_metrics, get_memory_metrics
+            )
+            
+            PROM_QUERY_METRICS = [QueryFunction.AVG, QueryFunction.MAX]
+            RUNNER_POD_NAME = os.getenv(PODNAME_ENV_VAR_NAME)
+            
+            if not THANOS_API_TOKEN:
+                raise fmwork.Exception("THANOS_API_TOKEN not set")
+            
+            prom_metrics = {}
+            
+            start_timestamp = datetime.fromtimestamp(client_start_time, ZoneInfo('UTC'))
+            end_timestamp = datetime.fromtimestamp(client_end_time, ZoneInfo('UTC'))
+            
+            if not RUNNER_POD_NAME:
+                raise fmwork.Exception("HOSTNAME env variable missing")
+            
+            pod_label_config = f'{{pod="{RUNNER_POD_NAME}", container!=""}}'
+            
+            for query_fn in PROM_QUERY_METRICS:
+                cpu_metrics = get_cpu_metrics(
+                    THANOS_API_URL,
+                    pod_label_config,
+                    start_timestamp,
+                    end_timestamp,
+                    query_fn=query_fn
+                )
+                memory_metrics = get_memory_metrics(
+                    THANOS_API_URL,
+                    pod_label_config,
+                    start_timestamp,
+                    end_timestamp,
+                    query_fn=query_fn
+                )
+                prom_metrics[query_fn.value] = {
+                    "cpu": cpu_metrics,
+                    "memory": memory_metrics
+                }
+                    
+        except Exception as e:
+            if not error_code:
+                error_code = "METRICS_ERROR"
+                error_msg = f'METRICS_ERROR | "Failed to process metrics: {str(e)}"'
+
     # Determine status and notes
     status = None
     notes = []
@@ -781,6 +796,7 @@ def process_server(args):
         'status'        : status,
         'error_msg'     : error_msg,
         'notes'         : notes,
+        'metrics'       : metrics, # Add full metrics dict
         'prom_metrics'  : prom_metrics if prom_metrics and args.enable_prom_metrics else None,
     }]
 
