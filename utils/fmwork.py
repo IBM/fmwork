@@ -290,6 +290,9 @@ class RandomGenerator:
 
         if return_tensors == 'np': return tokens
 
+        if return_tensors == 'vllm':
+            return [{"prompt_token_ids": [int(i) for i in t]} for t in tokens]
+
         input_batch = BatchEncoding({
             'input_ids' : torch.tensor(tokens),
             'attention_mask' : torch.ones(batch_size, input_size),

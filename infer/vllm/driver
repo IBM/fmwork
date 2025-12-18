@@ -179,7 +179,7 @@ def bench_combo_rep(
     inputs = generator.prompt(
         input_size,
         batch_size * args.batch_multiplier,
-        'np',
+        'vllm', # 'np' if older version <= vllm 0.6.0
     )
 
     sampling_params = vllm.SamplingParams(
@@ -189,7 +189,7 @@ def bench_combo_rep(
     )
 
     kwargs = {
-        'prompt_token_ids' : inputs,
+        'prompts' : inputs,
         'sampling_params'  : sampling_params,
         'use_tqdm'         : False,
     }
