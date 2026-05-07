@@ -16,9 +16,9 @@ def main():
     params()
 
     # spyre environment variables
-    os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = par.input_size
-    os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"] = str(max(var.output_sizes))
-    os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = par.batch_size
+    os.environ["SENDNN_INFERENCE_WARMUP_PROMPT_LENS"] = par.input_size
+    os.environ["SENDNN_INFERENCE_WARMUP_NEW_TOKENS"] = str(max(var.output_sizes))
+    os.environ['SENDNN_INFERENCE_WARMUP_BATCH_SIZES'] = par.batch_size
 
     if par.dataset_path:
         fmwork.banner('DATASET')

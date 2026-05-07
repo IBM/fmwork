@@ -246,7 +246,7 @@ def process_direct(args):
             split = line.strip().split(' ')
             opt = '--env ' + ' '.join(split[2:])
             opts.append(opt)
-            if 'VLLM_SPYRE_USE_CB' in line:
+            if 'SENDNN_INFERENCE_USE_CB' in line:
                 value = line.strip().split('=')[-1]
                 if value == '1':
                     batch_mode = 'continuous'
@@ -460,7 +460,7 @@ def process_server(args):
     batch_mode = 'static'
     for line in open(log_server):
         if line.startswith('FMWORK EXP'):
-            if 'VLLM_SPYRE_USE_CB' in line:
+            if 'SENDNN_INFERENCE_USE_CB' in line:
                 value = line.strip().split('=')[-1]
                 if value == '1':
                     batch_mode = 'continuous'
@@ -586,8 +586,8 @@ def process_server(args):
     num_prompts = None
     
     # Extract warmup parameters from server.cmd
-    warmup_prompt_match = re.search(r'VLLM_SPYRE_WARMUP_PROMPT_LENS=(\d+)', server_cmd_content)
-    warmup_tokens_match = re.search(r'VLLM_SPYRE_WARMUP_NEW_TOKENS=(\d+)', server_cmd_content)
+    warmup_prompt_match = re.search(r'SENDNN_INFERENCE_WARMUP_PROMPT_LENS=(\d+)', server_cmd_content)
+    warmup_tokens_match = re.search(r'SENDNN_INFERENCE_WARMUP_NEW_TOKENS=(\d+)', server_cmd_content)
     warmup_input = int(warmup_prompt_match.group(1)) if warmup_prompt_match else None
     warmup_output = int(warmup_tokens_match.group(1)) if warmup_tokens_match else None
     
