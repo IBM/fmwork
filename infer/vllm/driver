@@ -77,9 +77,9 @@ def setup_runtime_spyre(args):
 
     print('setup_runtime: spyre')
 
-    os.environ["VLLM_SPYRE_WARMUP_PROMPT_LENS"] = str(max(args.input_sizes))
-    os.environ["VLLM_SPYRE_WARMUP_NEW_TOKENS"]  = str(max(args.output_sizes))
-    os.environ['VLLM_SPYRE_WARMUP_BATCH_SIZES'] = str(max(args.batch_sizes))
+    os.environ["SENDNN_INFERENCE_WARMUP_PROMPT_LENS"] = str(max(args.input_sizes))
+    os.environ["SENDNN_INFERENCE_WARMUP_NEW_TOKENS"]  = str(max(args.output_sizes))
+    os.environ['SENDNN_INFERENCE_WARMUP_BATCH_SIZES'] = str(max(args.batch_sizes))
 
 #   ------------
 #   setup engine

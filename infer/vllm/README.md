@@ -71,9 +71,9 @@ client \
     --env FLEX_RDMA_MODE_FULL=FALSE \
     --env FLEX_HDMA_MODE_FULL=1 \
     --env OMP_NUM_THREADS=32 \
-    --env VLLM_SPYRE_WARMUP_PROMPT_LENS=1024 \
-    --env VLLM_SPYRE_WARMUP_NEW_TOKENS=128 \
-    --env VLLM_SPYRE_WARMUP_BATCH_SIZES=1 \
+    --env SENDNN_INFERENCE_WARMUP_PROMPT_LENS=1024 \
+    --env SENDNN_INFERENCE_WARMUP_NEW_TOKENS=128 \
+    --env SENDNN_INFERENCE_WARMUP_BATCH_SIZES=1 \
     -- \
 driver \
     --platform spyre \
@@ -108,7 +108,7 @@ driver \
     --env FLEX_RDMA_MODE_FULL=FALSE \
     --env FLEX_HDMA_MODE_FULL=1 \
     --env OMP_NUM_THREADS=32 \
-    --env VLLM_SPYRE_USE_CB=1 \
+    --env SENDNN_INFERENCE_USE_CB=1 \
     -- \
 driver \
     --platform spyre \
@@ -146,9 +146,9 @@ server \
     --env FLEX_RDMA_MODE_FULL=FALSE \
     --env FLEX_HDMA_MODE_FULL=1 \
     --env OMP_NUM_THREADS=32 \
-    --env VLLM_SPYRE_WARMUP_PROMPT_LENS=1024 \
-    --env VLLM_SPYRE_WARMUP_NEW_TOKENS=128 \
-    --env VLLM_SPYRE_WARMUP_BATCH_SIZES=1 \
+    --env SENDNN_INFERENCE_WARMUP_PROMPT_LENS=1024 \
+    --env SENDNN_INFERENCE_WARMUP_NEW_TOKENS=128 \
+    --env SENDNN_INFERENCE_WARMUP_BATCH_SIZES=1 \
     --no-enable-prefix-caching \
     --max-model-len 2048 \
     --max-num-seqs 1 \
@@ -182,7 +182,7 @@ server \
     --env FLEX_RDMA_MODE_FULL=FALSE \
     --env FLEX_HDMA_MODE_FULL=1 \
     --env OMP_NUM_THREADS=32 \
-    --env VLLM_SPYRE_USE_CB=1 \
+    --env SENDNN_INFERENCE_USE_CB=1 \
     --no-enable-prefix-caching \
     --max-model-len 2048 \
     --max-num-seqs 1 \
